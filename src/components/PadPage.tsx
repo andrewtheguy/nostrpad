@@ -1,0 +1,64 @@
+import { useMemo } from 'react'
+import { deriveKeys } from '../lib/keys'
+import { useNostrPad } from '../hooks/useNostrPad'
+import { Header } from './Header'
+import { Editor } from './Editor'
+
+interface PadPageProps {
+  padId: string
+  secret: string | null
+}
+
+export function PadPage({ padId, secret }: PadPageProps) {
+  const keys = useMemo(() => {
+    return deriveKeys(padId, secret)
+  }, [padId, secret])
+
+  const {
+    content,
+    setContent,
+    isConnected,
+    isSaving,
+    canEdit,
+    lastSaved
+  } = useNostrPad({
+    padId,
+    publicKey: keys?.publicKey || '',
+    secretKey: keys?.secretKey || null
+  })
+
+  if (!keys) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-red-500 mb-2">Invalid Pad</h1>
+          <p className="text-gray-400">The URL appears to be malformed.</p>
+          <a
+            href="/"
+            className="mt-4 inline-block px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+          >
+            Create New Pad
+          </a>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-900 flex flex-col">
+      <Header
+        isConnected={isConnected}
+        isSaving={isSaving}
+        canEdit={canEdit}
+        lastSaved={lastSaved}
+        padId={padId}
+        secret={secret}
+      />
+      <Editor
+        content={content}
+        onChange={setContent}
+        readOnly={!canEdit}
+      />
+    </div>
+  )
+}
