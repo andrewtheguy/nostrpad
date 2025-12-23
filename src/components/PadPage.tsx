@@ -59,7 +59,7 @@ export function PadPage({ padId, secret }: PadPageProps) {
         onChange={setContent}
         readOnly={!canEdit}
       />
-      <Footer content={content} relayStatus={relayStatus} />
+      <Footer content={content} relayStatus={relayStatus} padId={padId} secret={secret} />
     </div>
   )
 }
