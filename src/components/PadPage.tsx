@@ -59,7 +59,7 @@ export function PadPage({ padId, secret }: PadPageProps) {
         onChange={setContent}
         readOnly={!canEdit}
       />
-      <Footer characterCount={content.length} relayStatus={relayStatus} />
+      <Footer content={content} relayStatus={relayStatus} />
     </div>
   )
 }

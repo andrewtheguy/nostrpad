@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { MAX_CONTENT_LENGTH, DEFAULT_RELAYS } from '../lib/constants'
+import { formatCrc32 } from '../utils/crc32'
 
 interface FooterProps {
-  characterCount: number
+  content: string
   relayStatus: Map<string, boolean>
 }
 
-export function Footer({ characterCount, relayStatus }: FooterProps) {
+export function Footer({ content, relayStatus }: FooterProps) {
+  const characterCount = content.length
   const [expanded, setExpanded] = useState(false)
 
   const isOverLimit = characterCount > MAX_CONTENT_LENGTH
@@ -48,9 +50,12 @@ export function Footer({ characterCount, relayStatus }: FooterProps) {
           <span className={`transition-transform ${expanded ? 'rotate-90' : ''}`}>▶</span>
           <span>{connectedCount}/{totalCount} relays</span>
         </button>
-        <span className={`text-xs font-mono ${getCountColor()}`}>
-          {characterCount.toLocaleString()}/{MAX_CONTENT_LENGTH.toLocaleString()}
-        </span>
+        <div className="flex items-center gap-4">
+          <span className="text-xs font-mono text-gray-500">{formatCrc32(content)}</span>
+          <span className={`text-xs font-mono ${getCountColor()}`}>
+            {characterCount.toLocaleString()}/{MAX_CONTENT_LENGTH.toLocaleString()}
+          </span>
+        </div>
       </div>
 
       {expanded && (
