@@ -1,16 +1,28 @@
 import { useState } from 'react'
-import { MAX_CONTENT_LENGTH, DEFAULT_RELAYS } from '../lib/constants'
+import { MAX_CONTENT_LENGTH } from '../lib/constants'
 import { formatCrc32 } from '../utils/crc32'
 import { generateShareUrls } from '../lib/keys'
+import type { RelaySource } from '../hooks/useRelayDiscovery'
 
 interface FooterProps {
   content: string
   relayStatus: Map<string, boolean>
+  activeRelays: string[]
+  relaySource: RelaySource
   padId: string
   secret: string | null
+  isDiscovering: boolean
 }
 
-export function Footer({ content, relayStatus, padId, secret }: FooterProps) {
+export function Footer({
+  content,
+  relayStatus,
+  activeRelays,
+  relaySource,
+  padId,
+  secret,
+  isDiscovering
+}: FooterProps) {
   const characterCount = content.length
   const [expanded, setExpanded] = useState(false)
   const [copiedEditor, setCopiedEditor] = useState(false)
@@ -30,9 +42,8 @@ export function Footer({ content, relayStatus, padId, secret }: FooterProps) {
   const isOverLimit = characterCount > MAX_CONTENT_LENGTH
   const isNearLimit = characterCount > MAX_CONTENT_LENGTH * 0.9
 
-  // Count connected relays - check both the values and our expected relays
+  // Count connected relays
   const getRelayConnected = (relay: string): boolean => {
-    // Try various URL formats
     for (const [url, status] of relayStatus.entries()) {
       if (url.includes(relay.replace('wss://', '')) || relay.includes(url.replace('wss://', ''))) {
         return status
@@ -41,8 +52,8 @@ export function Footer({ content, relayStatus, padId, secret }: FooterProps) {
     return relayStatus.get(relay) ?? false
   }
 
-  const connectedCount = DEFAULT_RELAYS.filter(r => getRelayConnected(r)).length
-  const totalCount = DEFAULT_RELAYS.length
+  const connectedCount = activeRelays.filter(r => getRelayConnected(r)).length
+  const totalCount = activeRelays.length
 
   const getCountColor = () => {
     if (isOverLimit) return 'text-red-400'
@@ -51,9 +62,18 @@ export function Footer({ content, relayStatus, padId, secret }: FooterProps) {
   }
 
   const getRelayStatusColor = () => {
+    if (isDiscovering) return 'text-blue-400'
     if (connectedCount === 0) return 'text-red-400'
     if (connectedCount < totalCount) return 'text-yellow-400'
     return 'text-green-400'
+  }
+
+  const getSourceLabel = () => {
+    switch (relaySource) {
+      case 'discovered': return 'NIP-65'
+      case 'cached': return 'cached'
+      case 'bootstrap': return 'bootstrap'
+    }
   }
 
   return (
@@ -64,7 +84,14 @@ export function Footer({ content, relayStatus, padId, secret }: FooterProps) {
           className={`flex items-center gap-2 text-xs hover:text-white transition-colors ${getRelayStatusColor()}`}
         >
           <span className={`transition-transform ${expanded ? 'rotate-90' : ''}`}>▶</span>
-          <span>{connectedCount}/{totalCount} relays</span>
+          {isDiscovering ? (
+            <span>Discovering relays...</span>
+          ) : (
+            <span>
+              {connectedCount}/{totalCount} relays
+              <span className="text-gray-500 ml-1">({getSourceLabel()})</span>
+            </span>
+          )}
         </button>
         <div className="flex items-center gap-4">
           <span className="text-xs font-mono text-gray-300">{formatCrc32(content)}</span>
@@ -77,7 +104,12 @@ export function Footer({ content, relayStatus, padId, secret }: FooterProps) {
       {expanded && (
         <div className="px-4 pb-3 space-y-3">
           <div className="space-y-1">
-            {DEFAULT_RELAYS.map((relay) => {
+            <div className="text-xs text-gray-500 mb-2">
+              {relaySource === 'discovered' && 'Relays discovered via NIP-65'}
+              {relaySource === 'cached' && 'Using cached relay list'}
+              {relaySource === 'bootstrap' && 'Using bootstrap relays (NIP-65 not found)'}
+            </div>
+            {activeRelays.map((relay) => {
               const isConnected = getRelayConnected(relay)
               return (
                 <div key={relay} className="flex items-center gap-2 text-xs">

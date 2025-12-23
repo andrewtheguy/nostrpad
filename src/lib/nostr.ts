@@ -69,10 +69,14 @@ export function createPadIdSearchFilter(): Filter {
 /**
  * Publish event to relays
  */
-export async function publishEvent(pool: SimplePool, event: Event): Promise<string[]> {
+export async function publishEvent(
+  pool: SimplePool,
+  event: Event,
+  relays: string[] = DEFAULT_RELAYS
+): Promise<string[]> {
   const successRelays: string[] = []
 
-  const promises = DEFAULT_RELAYS.map(async (relay) => {
+  const promises = relays.map(async (relay) => {
     try {
       await pool.publish([relay], event)
       successRelays.push(relay)

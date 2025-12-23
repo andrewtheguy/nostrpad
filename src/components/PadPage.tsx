@@ -19,9 +19,12 @@ export function PadPage({ padId, secret }: PadPageProps) {
     content,
     setContent,
     relayStatus,
+    relaySource,
+    activeRelays,
     isSaving,
     canEdit,
-    lastSaved
+    lastSaved,
+    isDiscovering
   } = useNostrPad({
     padId,
     publicKey: keys?.publicKey || '',
@@ -60,7 +63,15 @@ export function PadPage({ padId, secret }: PadPageProps) {
         onChange={setContent}
         readOnly={!canEdit}
       />
-      <Footer content={content} relayStatus={relayStatus} padId={padId} secret={secret} />
+      <Footer
+        content={content}
+        relayStatus={relayStatus}
+        activeRelays={activeRelays}
+        relaySource={relaySource}
+        padId={padId}
+        secret={secret}
+        isDiscovering={isDiscovering}
+      />
     </div>
   )
 }

@@ -2,8 +2,10 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { SimplePool } from 'nostr-tools/pool'
 import type { Event } from 'nostr-tools/core'
 import { useDebounce } from './useDebounce'
+import { useRelayDiscovery } from './useRelayDiscovery'
+import type { RelaySource } from './useRelayDiscovery'
 import { createPadEvent, createPadFilter, createPadIdSearchFilter, publishEvent, isValidPadEvent, getPadIdFromPubkey } from '../lib/nostr'
-import { DEFAULT_RELAYS, DEBOUNCE_MS } from '../lib/constants'
+import { DEBOUNCE_MS } from '../lib/constants'
 
 interface UseNostrPadOptions {
   padId: string
@@ -15,10 +17,13 @@ interface UseNostrPadReturn {
   content: string
   setContent: (content: string) => void
   relayStatus: Map<string, boolean>
+  relaySource: RelaySource
+  activeRelays: string[]
   isSaving: boolean
   canEdit: boolean
   lastSaved: Date | null
   foundPublicKey: string | null
+  isDiscovering: boolean
 }
 
 export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions): UseNostrPadReturn {
@@ -34,6 +39,18 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
   const pendingPublishRef = useRef(false)
 
   const canEdit = secretKey !== null
+
+  // Use relay discovery
+  const {
+    relays: activeRelays,
+    relaySource,
+    isDiscovering
+  } = useRelayDiscovery({
+    padId,
+    publicKey,
+    secretKey,
+    isEditor: canEdit
+  })
 
   // Handle incoming events
   const handleEvent = useCallback((event: Event) => {
@@ -57,8 +74,11 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
     }
   }, [padId, publicKey])
 
-  // Initialize pool and subscribe
+  // Initialize pool and subscribe after relay discovery
   useEffect(() => {
+    // Wait for relay discovery to complete
+    if (isDiscovering || activeRelays.length === 0) return
+
     const pool = new SimplePool()
     poolRef.current = pool
 
@@ -71,7 +91,7 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
       filter = createPadIdSearchFilter()
     }
 
-    const sub = pool.subscribe(DEFAULT_RELAYS, filter, {
+    const sub = pool.subscribe(activeRelays, filter, {
       onevent: handleEvent,
       oneose: () => {
         // Update connection status on EOSE
@@ -82,16 +102,15 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
     // Poll connection status periodically
     const statusInterval = setInterval(() => {
       const status = pool.listConnectionStatus()
-      console.log('Relay status:', Object.fromEntries(status))
       setRelayStatus(new Map(status))
     }, 2000)
 
     return () => {
       clearInterval(statusInterval)
       sub.close()
-      pool.close(DEFAULT_RELAYS)
+      pool.close(activeRelays)
     }
-  }, [publicKey, handleEvent])
+  }, [publicKey, handleEvent, activeRelays, isDiscovering])
 
   // Debounced content for publishing
   const debouncedContent = useDebounce(content, DEBOUNCE_MS)
@@ -100,7 +119,7 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
 
   // Publish when debounced content changes
   useEffect(() => {
-    if (!canEdit || !secretKey || connectedCount === 0) return
+    if (!canEdit || !secretKey || connectedCount === 0 || isDiscovering) return
     if (pendingPublishRef.current) return
 
     // Don't publish if content matches latest event
@@ -120,7 +139,8 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
         const event = createPadEvent(debouncedContent, secretKey)
         const pool = poolRef.current
         if (pool) {
-          await publishEvent(pool, event)
+          // Use discovered relays
+          await publishEvent(pool, event, activeRelays)
           latestEventRef.current = event
           setLastSaved(new Date())
         }
@@ -134,7 +154,7 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
     }
 
     doPublish()
-  }, [debouncedContent, canEdit, secretKey, connectedCount])
+  }, [debouncedContent, canEdit, secretKey, connectedCount, activeRelays, isDiscovering])
 
   // Set content handler
   const setContent = useCallback((newContent: string) => {
@@ -147,9 +167,12 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
     content,
     setContent,
     relayStatus,
+    relaySource,
+    activeRelays,
     isSaving,
     canEdit,
     lastSaved,
-    foundPublicKey
+    foundPublicKey,
+    isDiscovering
   }
 }
