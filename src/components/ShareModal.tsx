@@ -50,32 +50,27 @@ export function ShareModal({ padId, secret, onClose }: ShareModalProps) {
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Viewer URL (Read Only)
             </label>
-            <div className="flex gap-4">
-              <div className="flex-shrink-0">
-                <canvas ref={canvasRef} className="rounded" />
-              </div>
-              <div className="flex-1 flex flex-col justify-center gap-2">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={viewerUrl}
-                    className="flex-1 px-3 py-2 bg-gray-700 text-gray-100 rounded text-sm font-mono"
-                  />
-                  <button
-                    onClick={copyToClipboard}
-                    className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-colors"
-                  >
-                    {copiedViewer ? 'Copied!' : 'Copy'}
-                  </button>
-                </div>
-                <p className="text-xs text-gray-500">
-                  Share this link with anyone who should view the pad
-                </p>
-              </div>
+            <div className="flex gap-2 mb-3">
+              <input
+                type="text"
+                readOnly
+                value={viewerUrl}
+                className="flex-1 px-3 py-2 bg-gray-700 text-gray-100 rounded text-sm font-mono"
+              />
+              <button
+                onClick={copyToClipboard}
+                className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-colors"
+              >
+                {copiedViewer ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mb-4">
+              Share this link with anyone who should view the pad
+            </p>
+            <div className="flex justify-center">
+              <canvas ref={canvasRef} className="rounded" />
             </div>
           </div>
-
         </div>
 
         <div className="mt-6 flex justify-end">
