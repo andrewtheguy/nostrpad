@@ -19,7 +19,6 @@ This approach allows viewers to find relays using only the padId (from the URL),
 1. Probe candidate relays (bootstrap + extras)
    ├── wss://relay.damus.io
    ├── wss://nos.lol
-   ├── wss://relay.nostr.band
    ├── wss://relay.primal.net
    ├── wss://nostr.wine
    └── wss://relay.snort.social

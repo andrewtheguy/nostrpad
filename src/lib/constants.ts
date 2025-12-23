@@ -8,7 +8,7 @@ export const RELAY_LIST_KIND = 10002
 export const BOOTSTRAP_RELAYS = [
   'wss://relay.damus.io',
   'wss://nos.lol',
-  'wss://relay.nostr.band'
+  'wss://relay.primal.net'
 ]
 
 // Keep DEFAULT_RELAYS as alias for backward compatibility
@@ -17,7 +17,6 @@ export const DEFAULT_RELAYS = BOOTSTRAP_RELAYS
 // Additional candidate relays to probe
 export const CANDIDATE_RELAYS = [
   ...BOOTSTRAP_RELAYS,
-  'wss://relay.primal.net',
   'wss://nostr.wine',
   'wss://relay.snort.social'
 ]

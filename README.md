@@ -36,7 +36,7 @@ A simple shared notepad powered by Nostr relays. Create a pad, share the link, a
 
 - wss://relay.damus.io
 - wss://nos.lol
-- wss://relay.nostr.band
+- wss://relay.primal.net
 
 ## Development
 
