@@ -53,6 +53,7 @@ export function PadPage({ padId, secret }: PadPageProps) {
         lastSaved={lastSaved}
         padId={padId}
         secret={secret}
+        content={content}
       />
       <Editor
         content={content}

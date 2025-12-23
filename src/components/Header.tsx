@@ -8,10 +8,12 @@ interface HeaderProps {
   lastSaved: Date | null
   padId: string
   secret: string | null
+  content: string
 }
 
-export function Header({ isSaving, canEdit, lastSaved, padId, secret }: HeaderProps) {
+export function Header({ isSaving, canEdit, lastSaved, padId, secret, content }: HeaderProps) {
   const [showShareModal, setShowShareModal] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const formatLastSaved = (date: Date | null) => {
     if (!date) return null
@@ -22,6 +24,16 @@ export function Header({ isSaving, canEdit, lastSaved, padId, secret }: HeaderPr
     const { padId: newPadId, secret: newSecret } = createNewPad()
     window.location.hash = `${newPadId}:${newSecret}`
     window.location.reload()
+  }
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1000)
+    } catch (error) {
+      console.error('Failed to copy:', error)
+    }
   }
 
   return (
@@ -49,6 +61,12 @@ export function Header({ isSaving, canEdit, lastSaved, padId, secret }: HeaderPr
           {!canEdit && (
             <span className="text-xs text-yellow-500">View Only</span>
           )}
+          <button
+            onClick={handleCopy}
+            className="px-3 py-1 text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
+          >
+            {copied ? 'Copied!' : 'Copy'}
+          </button>
           <button
             onClick={() => setShowShareModal(true)}
             className="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
