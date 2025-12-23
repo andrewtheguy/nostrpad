@@ -55,6 +55,8 @@ npm run build
 
 - Content limited to 16,000 characters (safe for most Nostr relays)
 - Uses Nostr kind 30078 (replaceable application-specific events)
+  - Only the latest version is stored on relays (no edit history)
+  - Content may be deleted if relays prune old/inactive events
 
 ## License
 
