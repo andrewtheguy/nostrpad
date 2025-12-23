@@ -10,6 +10,7 @@ A simple shared notepad powered by Nostr relays. Create a pad, share the link, a
 - **Read-only sharing** - Share view-only links without the secret
 - **Decentralized** - No central server, data stored on Nostr relays
 - **CRC32 checksum** - Verify content integrity at a glance
+- **No backend required** - Pure static site, host anywhere (Vercel, Netlify, GitHub Pages, Cloudflare Pages)
 
 ## URL Structure
 
