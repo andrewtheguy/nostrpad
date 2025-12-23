@@ -3,6 +3,7 @@ import { deriveKeys } from '../lib/keys'
 import { useNostrPad } from '../hooks/useNostrPad'
 import { Header } from './Header'
 import { Editor } from './Editor'
+import { Footer } from './Footer'
 
 interface PadPageProps {
   padId: string
@@ -17,7 +18,8 @@ export function PadPage({ padId, secret }: PadPageProps) {
   const {
     content,
     setContent,
-    isConnected,
+    connectedRelays,
+    totalRelays,
     isSaving,
     canEdit,
     lastSaved
@@ -29,7 +31,7 @@ export function PadPage({ padId, secret }: PadPageProps) {
 
   if (!keys) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-red-500 mb-2">Invalid Pad</h1>
           <p className="text-gray-400">The URL appears to be malformed.</p>
@@ -45,9 +47,10 @@ export function PadPage({ padId, secret }: PadPageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 flex flex-col">
+    <div className="h-screen bg-gray-900 flex flex-col">
       <Header
-        isConnected={isConnected}
+        connectedRelays={connectedRelays}
+        totalRelays={totalRelays}
         isSaving={isSaving}
         canEdit={canEdit}
         lastSaved={lastSaved}
@@ -59,6 +62,7 @@ export function PadPage({ padId, secret }: PadPageProps) {
         onChange={setContent}
         readOnly={!canEdit}
       />
+      <Footer characterCount={content.length} />
     </div>
   )
 }

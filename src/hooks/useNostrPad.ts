@@ -14,7 +14,8 @@ interface UseNostrPadOptions {
 interface UseNostrPadReturn {
   content: string
   setContent: (content: string) => void
-  isConnected: boolean
+  connectedRelays: number
+  totalRelays: number
   isSaving: boolean
   canEdit: boolean
   lastSaved: Date | null
@@ -23,7 +24,7 @@ interface UseNostrPadReturn {
 
 export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions): UseNostrPadReturn {
   const [content, setContentState] = useState('')
-  const [isConnected, setIsConnected] = useState(false)
+  const [connectedRelays, setConnectedRelays] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [foundPublicKey, setFoundPublicKey] = useState<string | null>(publicKey || null)
@@ -34,6 +35,7 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
   const pendingPublishRef = useRef(false)
 
   const canEdit = secretKey !== null
+  const totalRelays = DEFAULT_RELAYS.length
 
   // Handle incoming events
   const handleEvent = useCallback((event: Event) => {
@@ -74,11 +76,22 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
     const sub = pool.subscribe(DEFAULT_RELAYS, filter, {
       onevent: handleEvent,
       oneose: () => {
-        setIsConnected(true)
+        // Update connection count on EOSE
+        const status = pool.listConnectionStatus()
+        const connected = Array.from(status.values()).filter(Boolean).length
+        setConnectedRelays(connected)
       }
     })
 
+    // Poll connection status periodically
+    const statusInterval = setInterval(() => {
+      const status = pool.listConnectionStatus()
+      const connected = Array.from(status.values()).filter(Boolean).length
+      setConnectedRelays(connected)
+    }, 2000)
+
     return () => {
+      clearInterval(statusInterval)
       sub.close()
       pool.close(DEFAULT_RELAYS)
     }
@@ -89,7 +102,7 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
 
   // Publish when debounced content changes
   useEffect(() => {
-    if (!canEdit || !secretKey || !isConnected) return
+    if (!canEdit || !secretKey || connectedRelays === 0) return
     if (pendingPublishRef.current) return
 
     // Don't publish if content matches latest event
@@ -123,7 +136,7 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
     }
 
     doPublish()
-  }, [debouncedContent, canEdit, secretKey, isConnected])
+  }, [debouncedContent, canEdit, secretKey, connectedRelays])
 
   // Set content handler
   const setContent = useCallback((newContent: string) => {
@@ -135,7 +148,8 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
   return {
     content,
     setContent,
-    isConnected,
+    connectedRelays,
+    totalRelays,
     isSaving,
     canEdit,
     lastSaved,

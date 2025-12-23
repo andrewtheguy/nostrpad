@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { ShareModal } from './ShareModal'
 
 interface HeaderProps {
-  isConnected: boolean
+  connectedRelays: number
+  totalRelays: number
   isSaving: boolean
   canEdit: boolean
   lastSaved: Date | null
@@ -10,12 +11,18 @@ interface HeaderProps {
   secret: string | null
 }
 
-export function Header({ isConnected, isSaving, canEdit, lastSaved, padId, secret }: HeaderProps) {
+export function Header({ connectedRelays, totalRelays, isSaving, canEdit, lastSaved, padId, secret }: HeaderProps) {
   const [showShareModal, setShowShareModal] = useState(false)
 
   const formatLastSaved = (date: Date | null) => {
     if (!date) return null
     return date.toLocaleTimeString()
+  }
+
+  const getConnectionColor = () => {
+    if (connectedRelays === 0) return 'bg-red-500'
+    if (connectedRelays < totalRelays) return 'bg-yellow-500'
+    return 'bg-green-500'
   }
 
   return (
@@ -25,13 +32,11 @@ export function Header({ isConnected, isSaving, canEdit, lastSaved, padId, secre
           <h1 className="text-lg font-semibold text-white">NostrPad</h1>
           <div className="flex items-center gap-2">
             <div
-              className={`w-2 h-2 rounded-full ${
-                isConnected ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'
-              }`}
-              title={isConnected ? 'Connected' : 'Connecting...'}
+              className={`w-2 h-2 rounded-full ${getConnectionColor()} ${connectedRelays === 0 ? 'animate-pulse' : ''}`}
+              title={`${connectedRelays}/${totalRelays} relays connected`}
             />
             <span className="text-xs text-gray-400">
-              {isConnected ? 'Connected' : 'Connecting...'}
+              {connectedRelays}/{totalRelays} relays
             </span>
           </div>
         </div>
