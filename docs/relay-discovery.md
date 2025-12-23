@@ -5,7 +5,7 @@ NostrPad uses a relay exchange event (kind 10002) to enable dynamic relay discov
 ## Overview
 
 Instead of all pads using the same hardcoded relays, each pad:
-1. Discovers the best available relays when created
+1. Uses bootstrap relays by default and only discovers additional relays if bootstrap relays fail
 2. Publishes a relay exchange event with a `#d` tag containing the padId
 3. Viewers discover relays by querying bootstrap relays for the padId tag (with a `#p` fallback)
 
@@ -16,20 +16,20 @@ This approach allows viewers to find relays using only the padId (from the URL),
 ### Editor Creates a New Pad
 
 ```
-1. Probe candidate relays (bootstrap + extras)
+1. Probe bootstrap relays
    ├── wss://relay.damus.io
    ├── wss://nos.lol
    ├── wss://relay.primal.net
 
-2. Select 5 fastest relays by response time
+2. If bootstrap fails, discover relays via seed relays (NIP-66 + NIP-65)
+3. Probe discovered relays (NIP-11 + WebSocket) and select 5 fastest
 
-3. Publish kind 10002 event to bootstrap relays
+4. Publish kind 10002 event to bootstrap relays
    - Includes #d tag with padId for easy lookup
    - Similar to secure-send-web's PIN hint approach
 
-4. Use selected relays for pad content (kind 30078)
+5. Use selected relays for pad content (kind 30078)
 
-5. Cache relay list locally (5 min TTL)
 ```
 
 ### Viewer Opens Existing Pad
@@ -81,9 +81,14 @@ Constants in `src/lib/constants.ts`:
 | Constant | Default | Description |
 |----------|---------|-------------|
 | `RELAY_LIST_KIND` | 10002 | NIP-65 event kind |
+| `RELAY_DISCOVERY_KIND` | 30166 | NIP-66 event kind |
 | `BOOTSTRAP_RELAYS` | 3 relays | Initial relays for discovery |
 | `TARGET_RELAY_COUNT` | 5 | Number of relays to select |
-| `RELAY_PROBE_TIMEOUT` | 5000ms | Timeout for probing relays |
+| `RELAY_DISCOVERY_TIMEOUT` | 3000ms | Timeout for discovery queries |
+| `RELAY_INFO_TIMEOUT` | 2000ms | Timeout for NIP-11 fetch |
+| `RELAY_PROBE_TIMEOUT` | 2000ms | Timeout for probing relays |
+| `MAX_RELAYS_TO_PROBE` | 30 | Max relays to probe after discovery |
+
 ## UI Indicators
 
 The footer shows the relay source:
@@ -96,7 +101,8 @@ The footer shows the relay source:
 
 If relay discovery fails at any step, NostrPad falls back to bootstrap relays:
 
-1. All candidate relays unreachable → use bootstrap relays
+1. Bootstrap relays unavailable → attempt discovery
+2. No suitable relays respond → use bootstrap relays
 2. No kind 10002 event found → use bootstrap relays
 3. Network error during discovery → use bootstrap relays
 
@@ -113,14 +119,13 @@ If relay discovery fails at any step, NostrPad falls back to bootstrap relays:
 1. **Better reliability** - Pads aren't dependent on specific relays being up
 2. **Improved performance** - Uses fastest available relays
 3. **Decentralization** - Different pads can use different relay sets
-4. **Caching** - Reduces discovery overhead on page reload
-5. **Redundancy** - Bootstrap relays are always included even after discovery
+4. **Redundancy** - Bootstrap relays are always included even after discovery
 
 ## Comparison with secure-send-web
 
 | Feature | NostrPad | secure-send-web |
 |---------|----------|-----------------|
-| Lookup tag | `#p` (padId) | `#h` (PIN hint) |
+| Lookup tag | `#d` + fallback `#p` (padId) | `#h` (PIN hint) |
 | Event kind | 10002 | 24243 |
 | Relay info | In event tags | In encrypted payload |
 | Discovery | Query by tag | Query by tag |
@@ -132,4 +137,4 @@ Both use the same pattern: publish a discoverable event with a tag that can be q
 
 1. Bootstrap relays must be available for initial discovery
 2. Kind 10002 events may be pruned by some relays
-3. 5-minute cache means relay changes take time to propagate
+3. Discovery relies on NIP-66/NIP-65 events being available on seed relays

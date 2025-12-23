@@ -4,6 +4,7 @@ import { BOOTSTRAP_RELAYS } from '../lib/constants'
 import {
   fetchPadRelayList,
   selectBestRelays,
+  probeRelays,
   publishRelayList
 } from '../lib/relayDiscovery'
 
@@ -44,21 +45,29 @@ export function useRelayDiscovery({
 
     try {
       if (isEditor && secretKey) {
-        // Editor mode: discover best relays and publish relay list
-        const bestRelays = await selectBestRelays(BOOTSTRAP_RELAYS)
-
-        if (bestRelays.length > 0) {
-          // Always include bootstrap relays for redundancy
-          const allRelays = [...new Set([...bestRelays, ...BOOTSTRAP_RELAYS])]
-          setRelays(allRelays)
-          setRelaySource('discovered')
-
-          // Publish relay list to bootstrap relays with padId tag
-          await publishRelayList(pool, allRelays, padId, secretKey)
-        } else {
-          // Fallback to bootstrap if no relays available
+        // Editor mode: only discover if bootstrap relays are unavailable
+        const bootstrapProbes = await probeRelays(BOOTSTRAP_RELAYS)
+        if (bootstrapProbes.length > 0) {
           setRelays(BOOTSTRAP_RELAYS)
           setRelaySource('bootstrap')
+
+          // Publish relay list to bootstrap relays with padId tag
+          await publishRelayList(pool, BOOTSTRAP_RELAYS, padId, secretKey)
+        } else {
+          // Bootstrap failed, discover best relays and publish relay list
+          const bestRelays = await selectBestRelays(pool, BOOTSTRAP_RELAYS)
+
+          if (bestRelays.length > 0) {
+            setRelays(bestRelays)
+            setRelaySource('discovered')
+
+            // Publish relay list to bootstrap relays with padId tag
+            await publishRelayList(pool, bestRelays, padId, secretKey)
+          } else {
+            // Fallback to bootstrap if no relays available
+            setRelays(BOOTSTRAP_RELAYS)
+            setRelaySource('bootstrap')
+          }
         }
       } else {
         // Viewer mode: fetch relay list from bootstrap relays using padId tag

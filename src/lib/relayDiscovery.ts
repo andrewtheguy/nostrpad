@@ -4,9 +4,15 @@ import type { Event } from 'nostr-tools/core'
 import type { Filter } from 'nostr-tools/filter'
 import {
   RELAY_LIST_KIND,
+  RELAY_DISCOVERY_KIND,
   BOOTSTRAP_RELAYS,
   TARGET_RELAY_COUNT,
   RELAY_PROBE_TIMEOUT,
+  RELAY_DISCOVERY_TIMEOUT,
+  RELAY_INFO_TIMEOUT,
+  MAX_RELAYS_TO_PROBE,
+  MIN_MESSAGE_LENGTH,
+  MIN_CONTENT_LENGTH
 } from './constants'
 
 // Types
@@ -20,6 +26,15 @@ export interface RelayProbeResult {
   url: string
   responseTime: number
   available: boolean
+}
+
+interface RelayInformationDocument {
+  limitation?: {
+    max_message_length?: number
+    max_content_length?: number
+    payment_required?: boolean
+    auth_required?: boolean
+  }
 }
 
 // ====== Relay Exchange Event Creation ======
@@ -95,12 +110,66 @@ function createRelayListFallbackFilter(padId: string): Filter {
   }
 }
 
+function normalizeRelayUrl(url: string): string {
+  return url.replace(/\/+$/, '')
+}
+
+function relayHttpUrl(url: string): string {
+  return url
+    .replace(/^wss:\/\//, 'https://')
+    .replace(/^ws:\/\//, 'http://')
+}
+
+async function fetchRelayInfo(url: string): Promise<RelayInformationDocument | null> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), RELAY_INFO_TIMEOUT)
+
+  try {
+    const response = await fetch(relayHttpUrl(url), {
+      method: 'GET',
+      headers: { Accept: 'application/nostr+json' },
+      signal: controller.signal
+    })
+
+    if (!response.ok) return null
+    const json = await response.json()
+    return json as RelayInformationDocument
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+function isRelaySuitable(info: RelayInformationDocument): boolean {
+  const limitation = info.limitation
+  if (!limitation) return true
+
+  if (limitation.payment_required === true) return false
+  if (limitation.auth_required === true) return false
+
+  if (typeof limitation.max_message_length === 'number' && limitation.max_message_length < MIN_MESSAGE_LENGTH) {
+    return false
+  }
+
+  if (typeof limitation.max_content_length === 'number' && limitation.max_content_length < MIN_CONTENT_LENGTH) {
+    return false
+  }
+
+  return true
+}
+
 // ====== Relay Probing ======
 
 /**
  * Probe a single relay to check availability and response time
  */
 export async function probeRelay(url: string): Promise<RelayProbeResult> {
+  const info = await fetchRelayInfo(url)
+  if (info && !isRelaySuitable(info)) {
+    return { url, responseTime: Infinity, available: false }
+  }
+
   const start = Date.now()
 
   return new Promise((resolve) => {
@@ -133,20 +202,120 @@ export async function probeRelay(url: string): Promise<RelayProbeResult> {
  * Probe multiple relays and return sorted by response time
  */
 export async function probeRelays(urls: string[]): Promise<RelayProbeResult[]> {
-  const results = await Promise.all(urls.map(probeRelay))
-  return results
-    .filter(r => r.available)
-    .sort((a, b) => a.responseTime - b.responseTime)
+  return new Promise((resolve) => {
+    const results: RelayProbeResult[] = []
+    let completed = 0
+    let resolved = false
+
+    const tryResolve = () => {
+      if (resolved) return
+      const available = results.filter(r => r.available)
+      if (available.length >= TARGET_RELAY_COUNT || completed === urls.length) {
+        resolved = true
+        resolve(available.sort((a, b) => a.responseTime - b.responseTime))
+      }
+    }
+
+    urls.forEach((url) => {
+      probeRelay(url)
+        .then((result) => {
+          results.push(result)
+        })
+        .catch(() => {
+          results.push({ url, responseTime: Infinity, available: false })
+        })
+        .finally(() => {
+          completed += 1
+          tryResolve()
+        })
+    })
+  })
 }
 
 /**
  * Select best relays from candidates
  */
-export async function selectBestRelays(candidateUrls: string[]): Promise<string[]> {
-  const probeResults = await probeRelays(candidateUrls)
-  return probeResults
-    .slice(0, TARGET_RELAY_COUNT)
-    .map(r => r.url)
+export async function selectBestRelays(
+  pool: SimplePool,
+  seedRelays: string[]
+): Promise<string[]> {
+  const discoveredRelays = await discoverRelaysFromSeeds(pool, seedRelays)
+  const relaysToProbe = discoveredRelays.slice(0, MAX_RELAYS_TO_PROBE)
+  const probeResults = await probeRelays(relaysToProbe)
+  return probeResults.slice(0, TARGET_RELAY_COUNT).map(r => r.url)
+}
+
+// ====== Relay Discovery ======
+
+async function fetchEventsFromRelays(
+  pool: SimplePool,
+  relays: string[],
+  filter: Filter,
+  timeoutMs: number
+): Promise<Event[]> {
+  return new Promise((resolve) => {
+    const events: Event[] = []
+    const sub = pool.subscribe(relays, filter, {
+      onevent: (event) => {
+        events.push(event)
+      },
+      oneose: () => {
+        // Wait for timeout to maximize relay coverage
+      }
+    })
+
+    const timeout = setTimeout(() => {
+      sub.close()
+      resolve(events)
+    }, timeoutMs)
+
+  })
+}
+
+function extractRelayFromNip66(event: Event): string | null {
+  const tag = event.tags.find(t => t[0] === 'd' && typeof t[1] === 'string')
+  const url = tag?.[1]
+  if (!url) return null
+  if (url.startsWith('wss://') || url.startsWith('ws://')) return url
+  return null
+}
+
+function extractRelaysFromNip65(event: Event): string[] {
+  return parseRelayListEvent(event).map(r => r.url)
+}
+
+async function discoverRelaysFromSeeds(
+  pool: SimplePool,
+  seedRelays: string[]
+): Promise<string[]> {
+  const discovered = new Set(seedRelays.map(normalizeRelayUrl))
+
+  const nip66Events = await fetchEventsFromRelays(
+    pool,
+    seedRelays,
+    { kinds: [RELAY_DISCOVERY_KIND], limit: 100 },
+    RELAY_DISCOVERY_TIMEOUT
+  )
+
+  for (const event of nip66Events) {
+    const relayUrl = extractRelayFromNip66(event)
+    if (relayUrl) discovered.add(normalizeRelayUrl(relayUrl))
+  }
+
+  const nip65Events = await fetchEventsFromRelays(
+    pool,
+    seedRelays,
+    { kinds: [RELAY_LIST_KIND], limit: 100 },
+    RELAY_DISCOVERY_TIMEOUT
+  )
+
+  for (const event of nip65Events) {
+    for (const relayUrl of extractRelaysFromNip65(event)) {
+      discovered.add(normalizeRelayUrl(relayUrl))
+    }
+  }
+
+  return [...discovered]
 }
 
 // ====== Relay List Fetching ======
