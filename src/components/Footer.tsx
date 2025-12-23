@@ -29,15 +29,15 @@ export function Footer({ content, relayStatus }: FooterProps) {
   const totalCount = DEFAULT_RELAYS.length
 
   const getCountColor = () => {
-    if (isOverLimit) return 'text-red-500'
-    if (isNearLimit) return 'text-yellow-500'
-    return 'text-gray-400'
+    if (isOverLimit) return 'text-red-400'
+    if (isNearLimit) return 'text-yellow-400'
+    return 'text-gray-300'
   }
 
   const getRelayStatusColor = () => {
-    if (connectedCount === 0) return 'text-red-500'
-    if (connectedCount < totalCount) return 'text-yellow-500'
-    return 'text-green-500'
+    if (connectedCount === 0) return 'text-red-400'
+    if (connectedCount < totalCount) return 'text-yellow-400'
+    return 'text-green-400'
   }
 
   return (
@@ -51,7 +51,7 @@ export function Footer({ content, relayStatus }: FooterProps) {
           <span>{connectedCount}/{totalCount} relays</span>
         </button>
         <div className="flex items-center gap-4">
-          <span className="text-xs font-mono text-gray-500">{formatCrc32(content)}</span>
+          <span className="text-xs font-mono text-gray-300">{formatCrc32(content)}</span>
           <span className={`text-xs font-mono ${getCountColor()}`}>
             {characterCount.toLocaleString()}/{MAX_CONTENT_LENGTH.toLocaleString()}
           </span>
@@ -65,7 +65,7 @@ export function Footer({ content, relayStatus }: FooterProps) {
             return (
               <div key={relay} className="flex items-center gap-2 text-xs">
                 <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-                <span className="font-mono text-gray-400">{relay}</span>
+                <span className="font-mono text-gray-300">{relay}</span>
               </div>
             )
           })}
