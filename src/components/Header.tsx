@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ShareModal } from './ShareModal'
+import { createNewPad } from '../lib/keys'
 
 interface HeaderProps {
   isSaving: boolean
@@ -17,10 +18,24 @@ export function Header({ isSaving, canEdit, lastSaved, padId, secret }: HeaderPr
     return date.toLocaleTimeString()
   }
 
+  const handleNewPad = () => {
+    const { padId: newPadId, secret: newSecret } = createNewPad()
+    window.location.hash = `${newPadId}:${newSecret}`
+    window.location.reload()
+  }
+
   return (
     <>
       <header className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
-        <h1 className="text-lg font-semibold text-white">NostrPad</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-lg font-semibold text-white">NostrPad</h1>
+          <button
+            onClick={handleNewPad}
+            className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors"
+          >
+            + New
+          </button>
+        </div>
 
         <div className="flex items-center gap-4">
           {isSaving && (
