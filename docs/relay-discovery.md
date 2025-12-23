@@ -37,20 +37,17 @@ This approach allows viewers to find relays using only the padId (from the URL),
 ### Viewer Opens Existing Pad
 
 ```
-1. Check local cache for relay list
-   └── If found and fresh → use cached relays
-
-2. Query bootstrap relays for kind 10002 event
+1. Query bootstrap relays for kind 10002 event
    Filter: { kinds: [10002], '#d': ['nostrpad:<padId>'] }
    └── Uses padId tag, not pubkey (works without full key)
    └── Fallback: { kinds: [10002], '#p': [padId] }
 
-3. Parse relay list from event tags
+2. Parse relay list from event tags
 
-4. Connect to discovered relays
+3. Connect to discovered relays
    └── If not found → fallback to bootstrap relays
 
-5. Subscribe to pad content
+4. Subscribe to pad content
 ```
 
 ## Relay Exchange Event Format
@@ -90,14 +87,11 @@ Constants in `src/lib/constants.ts`:
 | `CANDIDATE_RELAYS` | 6 relays | Relays to probe for selection |
 | `TARGET_RELAY_COUNT` | 5 | Number of relays to select |
 | `RELAY_PROBE_TIMEOUT` | 5000ms | Timeout for probing relays |
-| `RELAY_CACHE_DURATION` | 5 min | How long to cache relay lists |
-
 ## UI Indicators
 
 The footer shows the relay source:
 
 - **(NIP-65)** - Relays discovered from kind 10002 event
-- **(cached)** - Using cached relay list from localStorage
 - **(bootstrap)** - Fallback to default relays (no NIP-65 found)
 - **Discovering relays...** - Currently probing relays
 
@@ -108,7 +102,6 @@ If relay discovery fails at any step, NostrPad falls back to bootstrap relays:
 1. All candidate relays unreachable → use bootstrap relays
 2. No kind 10002 event found → use bootstrap relays
 3. Network error during discovery → use bootstrap relays
-4. Cache expired → re-discover, use bootstrap if fails
 
 ## Files
 

@@ -4,12 +4,10 @@ import { BOOTSTRAP_RELAYS, CANDIDATE_RELAYS } from '../lib/constants'
 import {
   fetchPadRelayList,
   selectBestRelays,
-  publishRelayList,
-  getCachedRelays,
-  cacheRelays
+  publishRelayList
 } from '../lib/relayDiscovery'
 
-export type RelaySource = 'discovered' | 'bootstrap' | 'cached'
+export type RelaySource = 'discovered' | 'bootstrap'
 
 export interface UseRelayDiscoveryOptions {
   padId: string
@@ -45,15 +43,6 @@ export function useRelayDiscovery({
     poolRef.current = pool
 
     try {
-      // Step 1: Check cache first
-      const cachedRelays = getCachedRelays(padId)
-      if (cachedRelays && cachedRelays.length > 0) {
-        setRelays(cachedRelays)
-        setRelaySource('cached')
-        setIsDiscovering(false)
-        return
-      }
-
       if (isEditor && secretKey) {
         // Editor mode: discover best relays and publish relay list
         const bestRelays = await selectBestRelays(CANDIDATE_RELAYS)
@@ -63,7 +52,6 @@ export function useRelayDiscovery({
           const allRelays = [...new Set([...bestRelays, ...BOOTSTRAP_RELAYS])]
           setRelays(allRelays)
           setRelaySource('discovered')
-          cacheRelays(padId, allRelays)
 
           // Publish relay list to bootstrap relays with padId tag
           await publishRelayList(pool, allRelays, padId, secretKey)
@@ -82,7 +70,6 @@ export function useRelayDiscovery({
           const allRelays = [...new Set([...discoveredRelays, ...BOOTSTRAP_RELAYS])]
           setRelays(allRelays)
           setRelaySource('discovered')
-          cacheRelays(padId, allRelays)
         } else {
           // Fallback to bootstrap relays
           setRelays(BOOTSTRAP_RELAYS)

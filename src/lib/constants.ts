@@ -28,10 +28,6 @@ export const TARGET_RELAY_COUNT = 5
 export const RELAY_PROBE_TIMEOUT = 5000
 
 // Cache duration for discovered relays (5 minutes)
-export const RELAY_CACHE_DURATION = 5 * 60 * 1000
-
-// LocalStorage key for relay cache
-export const RELAY_CACHE_KEY = 'nostrpad_relay_cache'
 
 export const DEBOUNCE_MS = 500
 

@@ -7,8 +7,6 @@ import {
   BOOTSTRAP_RELAYS,
   TARGET_RELAY_COUNT,
   RELAY_PROBE_TIMEOUT,
-  RELAY_CACHE_DURATION,
-  RELAY_CACHE_KEY
 } from './constants'
 
 // Types
@@ -22,12 +20,6 @@ export interface RelayProbeResult {
   url: string
   responseTime: number
   available: boolean
-}
-
-interface RelayCache {
-  padId: string
-  relays: string[]
-  timestamp: number
 }
 
 // ====== Relay Exchange Event Creation ======
@@ -226,51 +218,6 @@ export async function publishRelayList(
   )
 }
 
-// ====== Caching ======
-
-/**
- * Get cached relays for a pad
- */
-export function getCachedRelays(padId: string): string[] | null {
-  try {
-    const cacheJson = localStorage.getItem(RELAY_CACHE_KEY)
-    if (!cacheJson) return null
-
-    const cache: Record<string, RelayCache> = JSON.parse(cacheJson)
-    const entry = cache[padId]
-
-    if (!entry) return null
-
-    // Check if cache is still valid
-    if (Date.now() - entry.timestamp > RELAY_CACHE_DURATION) {
-      return null
-    }
-
-    return entry.relays
-  } catch {
-    return null
-  }
-}
-
-/**
- * Cache relays for a pad
- */
-export function cacheRelays(padId: string, relays: string[]): void {
-  try {
-    const cacheJson = localStorage.getItem(RELAY_CACHE_KEY)
-    const cache: Record<string, RelayCache> = cacheJson ? JSON.parse(cacheJson) : {}
-
-    cache[padId] = {
-      padId,
-      relays,
-      timestamp: Date.now()
-    }
-
-    localStorage.setItem(RELAY_CACHE_KEY, JSON.stringify(cache))
-  } catch {
-    // Ignore cache errors
-  }
-}
 
 /**
  * Clear cached relays for a pad
