@@ -18,8 +18,7 @@ export function PadPage({ padId, secret }: PadPageProps) {
   const {
     content,
     setContent,
-    connectedRelays,
-    totalRelays,
+    relayStatus,
     isSaving,
     canEdit,
     lastSaved
@@ -49,8 +48,6 @@ export function PadPage({ padId, secret }: PadPageProps) {
   return (
     <div className="h-screen bg-gray-900 flex flex-col">
       <Header
-        connectedRelays={connectedRelays}
-        totalRelays={totalRelays}
         isSaving={isSaving}
         canEdit={canEdit}
         lastSaved={lastSaved}
@@ -62,7 +59,7 @@ export function PadPage({ padId, secret }: PadPageProps) {
         onChange={setContent}
         readOnly={!canEdit}
       />
-      <Footer characterCount={content.length} />
+      <Footer characterCount={content.length} relayStatus={relayStatus} />
     </div>
   )
 }
