@@ -15,8 +15,8 @@ A simple shared notepad powered by Nostr relays. Create a pad, share the link, a
 ## URL Structure
 
 ```
-/#79ggjXVP               → Read-only view (pad ID only)
-/#79ggjXVP:xK9mNpQr...   → Editor view (pad ID + secret)
+/#79ggjXVP:xK9mNpQr...   → Editor view (pad ID + secret, don't share)
+/#79ggjXVP               → Read-only view (pad ID only, shared with others)
 ```
 
 ## How It Works
