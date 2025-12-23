@@ -38,24 +38,25 @@ export function Header({ isSaving, canEdit, lastSaved, padId, secret, content }:
 
   return (
     <>
-      <header className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
-        <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold text-white">NostrPad</h1>
+      <header className="flex items-center justify-between px-2 sm:px-4 py-2 bg-gray-800 border-b border-gray-700">
+        <div className="flex items-center gap-2">
+          <h1 className="text-base sm:text-lg font-semibold text-white">NostrPad</h1>
           <button
             onClick={handleNewPad}
-            className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors"
+            className="px-1.5 sm:px-2 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors"
           >
-            + New
+            <span className="sm:hidden">+</span>
+            <span className="hidden sm:inline">+ New</span>
           </button>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
           {isSaving && (
             <span className="text-xs text-blue-400">Saving...</span>
           )}
           {!isSaving && lastSaved && (
-            <span className="text-xs text-gray-500">
-              Saved at {formatLastSaved(lastSaved)}
+            <span className="text-xs text-gray-500 hidden sm:inline">
+              Saved {formatLastSaved(lastSaved)}
             </span>
           )}
           {!canEdit && (
@@ -63,13 +64,13 @@ export function Header({ isSaving, canEdit, lastSaved, padId, secret, content }:
           )}
           <button
             onClick={handleCopy}
-            className="px-3 py-1 text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
+            className="px-2 py-1 text-xs sm:text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
           >
-            {copied ? 'Copied!' : 'Copy'}
+            {copied ? '✓Copied' : 'Copy'}
           </button>
           <button
             onClick={() => setShowShareModal(true)}
-            className="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+            className="px-2 py-1 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
           >
             Share
           </button>
