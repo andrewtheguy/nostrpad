@@ -11,16 +11,6 @@ export const BOOTSTRAP_RELAYS = [
   'wss://relay.primal.net'
 ]
 
-// Keep DEFAULT_RELAYS as alias for backward compatibility
-export const DEFAULT_RELAYS = BOOTSTRAP_RELAYS
-
-// Additional candidate relays to probe
-export const CANDIDATE_RELAYS = [
-  ...BOOTSTRAP_RELAYS,
-  'wss://nostr.wine',
-  'wss://relay.snort.social'
-]
-
 // Number of relays to select for a pad
 export const TARGET_RELAY_COUNT = 5
 

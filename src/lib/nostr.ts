@@ -2,7 +2,7 @@ import { finalizeEvent, verifyEvent } from 'nostr-tools/pure'
 import { SimplePool } from 'nostr-tools/pool'
 import type { Event } from 'nostr-tools/core'
 import type { Filter } from 'nostr-tools/filter'
-import { NOSTRPAD_KIND, D_TAG, DEFAULT_RELAYS } from './constants'
+import { NOSTRPAD_KIND, D_TAG, BOOTSTRAP_RELAYS } from './constants'
 import { encodeFixed } from './encoding'
 
 const PAD_ID_LENGTH = 8
@@ -72,7 +72,7 @@ export function createPadIdSearchFilter(): Filter {
 export async function publishEvent(
   pool: SimplePool,
   event: Event,
-  relays: string[] = DEFAULT_RELAYS
+  relays: string[] = BOOTSTRAP_RELAYS
 ): Promise<string[]> {
   const successRelays: string[] = []
 

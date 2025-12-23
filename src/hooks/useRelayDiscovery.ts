@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { SimplePool } from 'nostr-tools/pool'
-import { BOOTSTRAP_RELAYS, CANDIDATE_RELAYS } from '../lib/constants'
+import { BOOTSTRAP_RELAYS } from '../lib/constants'
 import {
   fetchPadRelayList,
   selectBestRelays,
@@ -45,7 +45,7 @@ export function useRelayDiscovery({
     try {
       if (isEditor && secretKey) {
         // Editor mode: discover best relays and publish relay list
-        const bestRelays = await selectBestRelays(CANDIDATE_RELAYS)
+        const bestRelays = await selectBestRelays(BOOTSTRAP_RELAYS)
 
         if (bestRelays.length > 0) {
           // Always include bootstrap relays for redundancy

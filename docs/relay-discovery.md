@@ -20,8 +20,6 @@ This approach allows viewers to find relays using only the padId (from the URL),
    ├── wss://relay.damus.io
    ├── wss://nos.lol
    ├── wss://relay.primal.net
-   ├── wss://nostr.wine
-   └── wss://relay.snort.social
 
 2. Select 5 fastest relays by response time
 
@@ -84,7 +82,6 @@ Constants in `src/lib/constants.ts`:
 |----------|---------|-------------|
 | `RELAY_LIST_KIND` | 10002 | NIP-65 event kind |
 | `BOOTSTRAP_RELAYS` | 3 relays | Initial relays for discovery |
-| `CANDIDATE_RELAYS` | 6 relays | Relays to probe for selection |
 | `TARGET_RELAY_COUNT` | 5 | Number of relays to select |
 | `RELAY_PROBE_TIMEOUT` | 5000ms | Timeout for probing relays |
 ## UI Indicators
