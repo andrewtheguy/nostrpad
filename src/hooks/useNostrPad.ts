@@ -81,7 +81,9 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
 
     // Poll connection status periodically
     const statusInterval = setInterval(() => {
-      setRelayStatus(new Map(pool.listConnectionStatus()))
+      const status = pool.listConnectionStatus()
+      console.log('Relay status:', Object.fromEntries(status))
+      setRelayStatus(new Map(status))
     }, 2000)
 
     return () => {

@@ -12,7 +12,18 @@ export function Footer({ characterCount, relayStatus }: FooterProps) {
   const isOverLimit = characterCount > MAX_CONTENT_LENGTH
   const isNearLimit = characterCount > MAX_CONTENT_LENGTH * 0.9
 
-  const connectedCount = Array.from(relayStatus.values()).filter(Boolean).length
+  // Count connected relays - check both the values and our expected relays
+  const getRelayConnected = (relay: string): boolean => {
+    // Try various URL formats
+    for (const [url, status] of relayStatus.entries()) {
+      if (url.includes(relay.replace('wss://', '')) || relay.includes(url.replace('wss://', ''))) {
+        return status
+      }
+    }
+    return relayStatus.get(relay) ?? false
+  }
+
+  const connectedCount = DEFAULT_RELAYS.filter(r => getRelayConnected(r)).length
   const totalCount = DEFAULT_RELAYS.length
 
   const getCountColor = () => {
@@ -45,11 +56,11 @@ export function Footer({ characterCount, relayStatus }: FooterProps) {
       {expanded && (
         <div className="px-4 pb-3 space-y-1">
           {DEFAULT_RELAYS.map((relay) => {
-            const isConnected = relayStatus.get(relay) ?? false
+            const isConnected = getRelayConnected(relay)
             return (
               <div key={relay} className="flex items-center gap-2 text-xs">
                 <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-                <span className="text-gray-400 font-mono">{relay}</span>
+                <span className="font-mono text-gray-400">{relay}</span>
               </div>
             )
           })}
