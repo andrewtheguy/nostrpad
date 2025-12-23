@@ -40,14 +40,13 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
 
   const canEdit = secretKey !== null
 
-  // Use relay discovery
+  // Use relay discovery (uses padId tag for lookup, like secure-send-web's PIN hint)
   const {
     relays: activeRelays,
     relaySource,
     isDiscovering
   } = useRelayDiscovery({
     padId,
-    publicKey,
     secretKey,
     isEditor: canEdit
   })

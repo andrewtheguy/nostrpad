@@ -13,7 +13,6 @@ export type RelaySource = 'discovered' | 'bootstrap' | 'cached'
 
 export interface UseRelayDiscoveryOptions {
   padId: string
-  publicKey: string
   secretKey: Uint8Array | null
   isEditor: boolean
 }
@@ -27,7 +26,6 @@ export interface UseRelayDiscoveryReturn {
 
 export function useRelayDiscovery({
   padId,
-  publicKey,
   secretKey,
   isEditor
 }: UseRelayDiscoveryOptions): UseRelayDiscoveryReturn {
@@ -61,25 +59,30 @@ export function useRelayDiscovery({
         const bestRelays = await selectBestRelays(CANDIDATE_RELAYS)
 
         if (bestRelays.length > 0) {
-          setRelays(bestRelays)
+          // Always include bootstrap relays for redundancy
+          const allRelays = [...new Set([...bestRelays, ...BOOTSTRAP_RELAYS])]
+          setRelays(allRelays)
           setRelaySource('discovered')
-          cacheRelays(padId, bestRelays)
+          cacheRelays(padId, allRelays)
 
-          // Publish relay list to bootstrap relays
-          await publishRelayList(pool, bestRelays, secretKey)
+          // Publish relay list to bootstrap relays with padId tag
+          await publishRelayList(pool, allRelays, padId, secretKey)
         } else {
           // Fallback to bootstrap if no relays available
           setRelays(BOOTSTRAP_RELAYS)
           setRelaySource('bootstrap')
         }
-      } else if (publicKey) {
-        // Viewer mode: fetch relay list from bootstrap relays
-        const discoveredRelays = await fetchPadRelayList(pool, publicKey)
+      } else {
+        // Viewer mode: fetch relay list from bootstrap relays using padId tag
+        // This works even without the full pubkey (like secure-send-web's PIN hint)
+        const discoveredRelays = await fetchPadRelayList(pool, padId)
 
         if (discoveredRelays && discoveredRelays.length > 0) {
-          setRelays(discoveredRelays)
+          // Always include bootstrap relays for redundancy
+          const allRelays = [...new Set([...discoveredRelays, ...BOOTSTRAP_RELAYS])]
+          setRelays(allRelays)
           setRelaySource('discovered')
-          cacheRelays(padId, discoveredRelays)
+          cacheRelays(padId, allRelays)
         } else {
           // Fallback to bootstrap relays
           setRelays(BOOTSTRAP_RELAYS)
@@ -99,7 +102,7 @@ export function useRelayDiscovery({
         poolRef.current = null
       }
     }
-  }, [padId, publicKey, secretKey, isEditor])
+  }, [padId, secretKey, isEditor])
 
   useEffect(() => {
     initializeRelays()

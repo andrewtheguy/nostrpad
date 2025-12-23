@@ -30,24 +30,32 @@ interface RelayCache {
   timestamp: number
 }
 
-// ====== NIP-65 Event Creation ======
+// ====== Relay Exchange Event Creation ======
 
 /**
- * Create a kind 10002 relay list event
+ * Create a kind 10002 relay list event with padId tag for discovery
+ * Similar to secure-send-web's PIN hint approach
  */
 export function createRelayListEvent(
   relays: RelayInfo[],
+  padId: string,
   secretKey: Uint8Array
 ): Event {
-  const tags = relays.map(relay => {
+  const tags: string[][] = [
+    ['d', `nostrpad:${padId}`],  // Makes it replaceable per pad
+    ['p', padId]                  // Tag for easy lookup by padId
+  ]
+
+  // Add relay tags
+  for (const relay of relays) {
     if (relay.read && relay.write) {
-      return ['r', relay.url]
+      tags.push(['r', relay.url])
     } else if (relay.read) {
-      return ['r', relay.url, 'read']
+      tags.push(['r', relay.url, 'read'])
     } else {
-      return ['r', relay.url, 'write']
+      tags.push(['r', relay.url, 'write'])
     }
-  })
+  }
 
   return finalizeEvent({
     kind: RELAY_LIST_KIND,
@@ -76,12 +84,13 @@ export function parseRelayListEvent(event: Event): RelayInfo[] {
 }
 
 /**
- * Create filter to fetch relay list for a pubkey
+ * Create filter to fetch relay list by padId tag
+ * This allows discovery without knowing the full pubkey
  */
-export function createRelayListFilter(publicKey: string): Filter {
+export function createRelayListFilter(padId: string): Filter {
   return {
     kinds: [RELAY_LIST_KIND],
-    authors: [publicKey],
+    '#p': [padId],
     limit: 1
   }
 }
@@ -143,13 +152,14 @@ export async function selectBestRelays(candidateUrls: string[]): Promise<string[
 // ====== Relay List Fetching ======
 
 /**
- * Fetch the relay list for a pad's pubkey from bootstrap relays
+ * Fetch the relay list for a pad from bootstrap relays using padId tag
+ * Similar to secure-send-web's PIN hint discovery
  */
 export async function fetchPadRelayList(
   pool: SimplePool,
-  publicKey: string
+  padId: string
 ): Promise<string[] | null> {
-  const filter = createRelayListFilter(publicKey)
+  const filter = createRelayListFilter(padId)
 
   return new Promise((resolve) => {
     let found = false
@@ -181,10 +191,12 @@ export async function fetchPadRelayList(
 
 /**
  * Publish relay list event to bootstrap relays
+ * Includes padId tag for easy discovery by viewers
  */
 export async function publishRelayList(
   pool: SimplePool,
   relays: string[],
+  padId: string,
   secretKey: Uint8Array
 ): Promise<void> {
   const relayInfos: RelayInfo[] = relays.map(url => ({
@@ -193,7 +205,7 @@ export async function publishRelayList(
     write: true
   }))
 
-  const event = createRelayListEvent(relayInfos, secretKey)
+  const event = createRelayListEvent(relayInfos, padId, secretKey)
 
   // Publish to bootstrap relays so others can discover
   await Promise.allSettled(
