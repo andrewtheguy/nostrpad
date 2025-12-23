@@ -90,6 +90,14 @@ export function parseRelayListEvent(event: Event): RelayInfo[] {
 export function createRelayListFilter(padId: string): Filter {
   return {
     kinds: [RELAY_LIST_KIND],
+    '#d': [`nostrpad:${padId}`],
+    limit: 1
+  }
+}
+
+function createRelayListFallbackFilter(padId: string): Filter {
+  return {
+    kinds: [RELAY_LIST_KIND],
     '#p': [padId],
     limit: 1
   }
@@ -159,32 +167,37 @@ export async function fetchPadRelayList(
   pool: SimplePool,
   padId: string
 ): Promise<string[] | null> {
-  const filter = createRelayListFilter(padId)
-
-  return new Promise((resolve) => {
-    let found = false
-    const timeout = setTimeout(() => {
-      if (!found) {
-        sub.close()
-        resolve(null)
-      }
-    }, RELAY_PROBE_TIMEOUT)
-
-    const sub = pool.subscribe(BOOTSTRAP_RELAYS, filter, {
-      onevent: (event) => {
-        if (!found && event.kind === RELAY_LIST_KIND) {
-          found = true
-          clearTimeout(timeout)
+  const tryFilter = (filter: Filter): Promise<string[] | null> => {
+    return new Promise((resolve) => {
+      let found = false
+      const timeout = setTimeout(() => {
+        if (!found) {
           sub.close()
-          const relays = parseRelayListEvent(event)
-          resolve(relays.filter(r => r.read).map(r => r.url))
+          resolve(null)
         }
-      },
-      oneose: () => {
-        // Wait for timeout to handle resolution
-      }
+      }, RELAY_PROBE_TIMEOUT)
+
+      const sub = pool.subscribe(BOOTSTRAP_RELAYS, filter, {
+        onevent: (event) => {
+          if (!found && event.kind === RELAY_LIST_KIND) {
+            found = true
+            clearTimeout(timeout)
+            sub.close()
+            const relays = parseRelayListEvent(event)
+            resolve(relays.filter(r => r.read).map(r => r.url))
+          }
+        },
+        oneose: () => {
+          // Wait for timeout to handle resolution
+        }
+      })
     })
-  })
+  }
+
+  const primary = await tryFilter(createRelayListFilter(padId))
+  if (primary && primary.length > 0) return primary
+
+  return await tryFilter(createRelayListFallbackFilter(padId))
 }
 
 // ====== Publishing ======

@@ -6,8 +6,8 @@ NostrPad uses a relay exchange event (kind 10002) to enable dynamic relay discov
 
 Instead of all pads using the same hardcoded relays, each pad:
 1. Discovers the best available relays when created
-2. Publishes a relay exchange event with a `#p` tag containing the padId
-3. Viewers discover relays by querying bootstrap relays for the padId tag
+2. Publishes a relay exchange event with a `#d` tag containing the padId
+3. Viewers discover relays by querying bootstrap relays for the padId tag (with a `#p` fallback)
 
 This approach allows viewers to find relays using only the padId (from the URL), without needing the full public key.
 
@@ -27,7 +27,7 @@ This approach allows viewers to find relays using only the padId (from the URL),
 2. Select 5 fastest relays by response time
 
 3. Publish kind 10002 event to bootstrap relays
-   - Includes #p tag with padId for easy lookup
+   - Includes #d tag with padId for easy lookup
    - Similar to secure-send-web's PIN hint approach
 
 4. Use selected relays for pad content (kind 30078)
@@ -42,8 +42,9 @@ This approach allows viewers to find relays using only the padId (from the URL),
    └── If found and fresh → use cached relays
 
 2. Query bootstrap relays for kind 10002 event
-   Filter: { kinds: [10002], '#p': [padId] }
+   Filter: { kinds: [10002], '#d': ['nostrpad:<padId>'] }
    └── Uses padId tag, not pubkey (works without full key)
+   └── Fallback: { kinds: [10002], '#p': [padId] }
 
 3. Parse relay list from event tags
 
@@ -76,7 +77,7 @@ The relay list is stored as a kind 10002 event with padId tags:
 
 Tag meanings:
 - `["d", "nostrpad:<padId>"]` - Makes event replaceable per pad
-- `["p", "<padId>"]` - Enables lookup by padId (like PIN hint)
+- `["p", "<padId>"]` - Optional fallback lookup by padId
 - `["r", "url"]` - Relay URL (read and write)
 
 ## Configuration
