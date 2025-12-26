@@ -3,7 +3,7 @@ import { SimplePool } from 'nostr-tools/pool'
 import type { Event } from 'nostr-tools/core'
 import { useDebounce } from './useDebounce'
 import { useRelayDiscovery } from './useRelayDiscovery'
-import { createPadEvent, createPadFilter, createPadIdSearchFilter, publishEvent, isValidPadEvent, getPadIdFromPubkey, decodePayload } from '../lib/nostr'
+import { createPadEvent, createPadIdSearchFilter, publishEvent, isValidPadEvent, getPadIdFromPubkey, decodePayload } from '../lib/nostr'
 import { DEBOUNCE_MS } from '../lib/constants'
 
 interface UseNostrPadOptions {
@@ -39,6 +39,7 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
   const pendingPublishRef = useRef(false)
 
   const canEdit = secretKey !== null
+  const storageKey = `nostrpad:${padId}`
 
   // Use relay discovery
   const {
@@ -73,32 +74,59 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
     }
   }, [padId, publicKey])
 
-  // Initialize pool and subscribe after relay discovery
+  // Load content from session storage on init (editor mode only)
   useEffect(() => {
-    // Wait for relay discovery to complete
+    if (!canEdit) return
+    const saved = sessionStorage.getItem(storageKey)
+    if (saved) {
+      setContentState(saved)
+      latestTextRef.current = saved
+    }
+  }, [canEdit, storageKey])
+
+  // Save to session storage on content change (editor mode only)
+  useEffect(() => {
+    if (!canEdit) return
+    sessionStorage.setItem(storageKey, content)
+  }, [canEdit, content, storageKey])
+
+  // Initialize pool for editor mode (publish-only, no subscription)
+  useEffect(() => {
     if (isDiscovering || activeRelays.length === 0) return
+    if (!canEdit) return
 
     const pool = new SimplePool()
     poolRef.current = pool
 
-    let filter
-    if (publicKey) {
-      // We have the full public key (editor mode)
-      filter = createPadFilter(publicKey)
-    } else {
-      // View-only mode - search for matching padId
-      filter = createPadIdSearchFilter()
+    // Poll connection status periodically
+    const statusInterval = setInterval(() => {
+      const status = pool.listConnectionStatus()
+      setRelayStatus(new Map(status))
+    }, 2000)
+
+    return () => {
+      clearInterval(statusInterval)
+      pool.close(activeRelays)
     }
+  }, [canEdit, activeRelays, isDiscovering])
+
+  // Initialize pool and subscribe for view-only mode
+  useEffect(() => {
+    if (isDiscovering || activeRelays.length === 0) return
+    if (canEdit) return
+
+    const pool = new SimplePool()
+    poolRef.current = pool
+
+    const filter = createPadIdSearchFilter()
 
     const sub = pool.subscribe(activeRelays, filter, {
       onevent: handleEvent,
       oneose: () => {
-        // Update connection status on EOSE
         setRelayStatus(new Map(pool.listConnectionStatus()))
       }
     })
 
-    // Poll connection status periodically
     const statusInterval = setInterval(() => {
       const status = pool.listConnectionStatus()
       setRelayStatus(new Map(status))
@@ -109,7 +137,7 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
       sub.close()
       pool.close(activeRelays)
     }
-  }, [publicKey, handleEvent, activeRelays, isDiscovering])
+  }, [canEdit, handleEvent, activeRelays, isDiscovering])
 
   // Debounced content for publishing
   const debouncedContent = useDebounce(content, DEBOUNCE_MS)
