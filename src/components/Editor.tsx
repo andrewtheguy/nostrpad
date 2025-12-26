@@ -19,7 +19,7 @@ export function Editor({ content, onChange, readOnly }: EditorProps) {
     <div className="relative flex-1 flex flex-col p-4 min-h-0">
       <div className="relative flex-1 rounded-lg overflow-hidden border border-gray-700">
         <textarea
-          className="w-full h-full p-4 bg-gray-900 text-gray-100 font-mono text-sm resize-none focus:outline-none border-0"
+          className="w-full h-full p-4 bg-gray-900 text-gray-100 font-mono text-base resize-none focus:outline-none border-0"
           value={content}
           onChange={handleChange}
           readOnly={readOnly}
