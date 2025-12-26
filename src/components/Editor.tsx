@@ -26,11 +26,6 @@ export function Editor({ content, onChange, readOnly }: EditorProps) {
           placeholder={readOnly ? "Waiting for content..." : "Start typing..."}
           spellCheck={false}
         />
-        {readOnly && (
-          <div className="absolute top-2 right-2 px-2 py-1 bg-yellow-600 text-yellow-100 text-xs font-medium rounded">
-            Read Only
-          </div>
-        )}
       </div>
     </div>
   )

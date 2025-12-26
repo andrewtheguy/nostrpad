@@ -51,6 +51,9 @@ export function Header({ isSaving, canEdit, lastSaved, padId, secret, content }:
       <header className="flex items-center justify-between px-2 sm:px-4 py-2 bg-gray-800 border-b border-gray-700">
         <div className="flex items-center gap-2">
           <h1 className="text-base sm:text-lg font-semibold text-white">NostrPad</h1>
+          {!canEdit && (
+            <span className="px-2 py-0.5 text-xs font-medium bg-yellow-600 text-yellow-100 rounded">View Only</span>
+          )}
           <button
             onClick={handleNewPad}
             className="px-1.5 sm:px-2 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors"
@@ -68,9 +71,6 @@ export function Header({ isSaving, canEdit, lastSaved, padId, secret, content }:
             <span className="text-xs text-gray-500 hidden sm:inline">
               Saved {formatLastSaved(lastSaved)}
             </span>
-          )}
-          {!canEdit && (
-            <span className="text-xs text-yellow-500">View Only</span>
           )}
           <button
             onClick={handleCopy}
