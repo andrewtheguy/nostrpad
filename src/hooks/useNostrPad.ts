@@ -98,6 +98,11 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
     const pool = new SimplePool()
     poolRef.current = pool
 
+    // Ensure connections are established to all relays
+    activeRelays.forEach(relay => {
+      pool.ensureRelay(relay)
+    })
+
     // Poll connection status periodically
     const statusInterval = setInterval(() => {
       const status = pool.listConnectionStatus()
