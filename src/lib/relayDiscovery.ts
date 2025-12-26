@@ -264,11 +264,10 @@ async function fetchEventsFromRelays(
       }
     })
 
-    const timeout = setTimeout(() => {
+    setTimeout(() => {
       sub.close()
       resolve(events)
     }, timeoutMs)
-
   })
 }
 
@@ -385,22 +384,4 @@ export async function publishRelayList(
   await Promise.allSettled(
     BOOTSTRAP_RELAYS.map(relay => pool.publish([relay], event))
   )
-}
-
-
-/**
- * Clear cached relays for a pad
- */
-export function clearCachedRelays(padId: string): void {
-  try {
-    const cacheJson = localStorage.getItem(RELAY_CACHE_KEY)
-    if (!cacheJson) return
-
-    const cache: Record<string, RelayCache> = JSON.parse(cacheJson)
-    delete cache[padId]
-
-    localStorage.setItem(RELAY_CACHE_KEY, JSON.stringify(cache))
-  } catch {
-    // Ignore cache errors
-  }
 }

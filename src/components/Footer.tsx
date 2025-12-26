@@ -71,7 +71,6 @@ export function Footer({
   const getSourceLabel = () => {
     switch (relaySource) {
       case 'discovered': return 'NIP-65'
-      case 'cached': return 'cached'
       case 'bootstrap': return 'bootstrap'
     }
   }
@@ -106,7 +105,6 @@ export function Footer({
           <div className="space-y-1">
             <div className="text-xs text-gray-500 mb-2">
               {relaySource === 'discovered' && 'Relays discovered via NIP-65'}
-              {relaySource === 'cached' && 'Using cached relay list'}
               {relaySource === 'bootstrap' && 'Using bootstrap relays (NIP-65 not found)'}
             </div>
             {activeRelays.map((relay) => {
