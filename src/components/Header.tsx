@@ -36,6 +36,16 @@ export function Header({ isSaving, canEdit, lastSaved, padId, secret, content }:
     }
   }
 
+  const handleDownload = () => {
+    const blob = new Blob([content], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `nostrpad-${Date.now()}.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <>
       <header className="flex items-center justify-between px-2 sm:px-4 py-2 bg-gray-800 border-b border-gray-700">
@@ -67,6 +77,12 @@ export function Header({ isSaving, canEdit, lastSaved, padId, secret, content }:
             className="px-2 py-1 text-xs sm:text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
           >
             {copied ? '✓Copied' : 'Copy'}
+          </button>
+          <button
+            onClick={handleDownload}
+            className="px-2 py-1 text-xs sm:text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
+          >
+            Download
           </button>
           <button
             onClick={() => setShowShareModal(true)}
