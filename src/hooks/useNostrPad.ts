@@ -3,7 +3,6 @@ import { SimplePool } from 'nostr-tools/pool'
 import type { Event } from 'nostr-tools/core'
 import { useDebounce } from './useDebounce'
 import { useRelayDiscovery } from './useRelayDiscovery'
-import type { RelaySource } from './useRelayDiscovery'
 import { createPadEvent, createPadFilter, createPadIdSearchFilter, publishEvent, isValidPadEvent, getPadIdFromPubkey, decodePayload } from '../lib/nostr'
 import { DEBOUNCE_MS } from '../lib/constants'
 
@@ -17,7 +16,6 @@ interface UseNostrPadReturn {
   content: string
   setContent: (content: string) => void
   relayStatus: Map<string, boolean>
-  relaySource: RelaySource
   activeRelays: string[]
   isSaving: boolean
   canEdit: boolean
@@ -42,16 +40,11 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
 
   const canEdit = secretKey !== null
 
-  // Use relay discovery (uses padId tag for lookup, like secure-send-web's PIN hint)
+  // Use relay discovery
   const {
     relays: activeRelays,
-    relaySource,
     isDiscovering
-  } = useRelayDiscovery({
-    padId,
-    secretKey,
-    isEditor: canEdit
-  })
+  } = useRelayDiscovery()
 
   // Handle incoming events
   const handleEvent = useCallback((event: Event) => {
@@ -177,7 +170,6 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
     content,
     setContent,
     relayStatus,
-    relaySource,
     activeRelays,
     isSaving,
     canEdit,

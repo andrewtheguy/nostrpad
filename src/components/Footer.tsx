@@ -1,14 +1,12 @@
 import { useState } from 'react'
-import { MAX_CONTENT_LENGTH } from '../lib/constants'
+import { MAX_CONTENT_LENGTH, BOOTSTRAP_RELAYS } from '../lib/constants'
 import { formatCrc32 } from '../utils/crc32'
 import { generateShareUrls } from '../lib/keys'
-import type { RelaySource } from '../hooks/useRelayDiscovery'
 
 interface FooterProps {
   content: string
   relayStatus: Map<string, boolean>
   activeRelays: string[]
-  relaySource: RelaySource
   padId: string
   secret: string | null
   isDiscovering: boolean
@@ -18,7 +16,6 @@ export function Footer({
   content,
   relayStatus,
   activeRelays,
-  relaySource,
   padId,
   secret,
   isDiscovering
@@ -53,7 +50,7 @@ export function Footer({
   }
 
   const connectedCount = activeRelays.filter(r => getRelayConnected(r)).length
-  const totalCount = activeRelays.length
+  const totalCount = BOOTSTRAP_RELAYS.length
 
   const getCountColor = () => {
     if (isOverLimit) return 'text-red-400'
@@ -68,12 +65,6 @@ export function Footer({
     return 'text-green-400'
   }
 
-  const getSourceLabel = () => {
-    switch (relaySource) {
-      case 'discovered': return 'NIP-65'
-      case 'bootstrap': return 'bootstrap'
-    }
-  }
 
   return (
     <footer className="bg-gray-800 border-t border-gray-700">
@@ -86,10 +77,7 @@ export function Footer({
           {isDiscovering ? (
             <span>Discovering relays...</span>
           ) : (
-            <span>
-              {connectedCount}/{totalCount} relays
-              <span className="text-gray-500 ml-1">({getSourceLabel()})</span>
-            </span>
+            <span>{connectedCount}/{totalCount} relays</span>
           )}
         </button>
         <div className="flex items-center gap-4">
@@ -104,14 +92,22 @@ export function Footer({
         <div className="px-4 pb-3 space-y-3">
           <div className="space-y-1">
             <div className="text-xs text-gray-500 mb-2">
-              {relaySource === 'discovered' && 'Relays discovered via NIP-65'}
-              {relaySource === 'bootstrap' && 'Using bootstrap relays (NIP-65 not found)'}
+              Using bootstrap relays
             </div>
-            {activeRelays.map((relay) => {
-              const isConnected = getRelayConnected(relay)
+            {BOOTSTRAP_RELAYS.map((relay) => {
+              const isAvailable = activeRelays.includes(relay)
+              const isConnected = isAvailable && getRelayConnected(relay)
+
+              // Red = failed probe, Yellow = available but not connected, Green = connected
+              const dotColor = !isAvailable
+                ? 'bg-red-500'
+                : isConnected
+                  ? 'bg-green-500'
+                  : 'bg-yellow-500'
+
               return (
                 <div key={relay} className="flex items-center gap-2 text-xs">
-                  <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+                  <div className={`w-2 h-2 rounded-full ${dotColor}`} />
                   <span className="font-mono text-gray-300">{relay}</span>
                 </div>
               )

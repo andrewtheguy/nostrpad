@@ -19,7 +19,6 @@ export function PadPage({ padId, secret }: PadPageProps) {
     content,
     setContent,
     relayStatus,
-    relaySource,
     activeRelays,
     isSaving,
     canEdit,
@@ -67,7 +66,6 @@ export function PadPage({ padId, secret }: PadPageProps) {
         content={content}
         relayStatus={relayStatus}
         activeRelays={activeRelays}
-        relaySource={relaySource}
         padId={padId}
         secret={secret}
         isDiscovering={isDiscovering}
