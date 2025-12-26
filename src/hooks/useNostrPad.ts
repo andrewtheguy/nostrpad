@@ -4,7 +4,7 @@ import type { Event } from 'nostr-tools/core'
 import { useDebounce } from './useDebounce'
 import { useRelayDiscovery } from './useRelayDiscovery'
 import type { RelaySource } from './useRelayDiscovery'
-import { createPadEvent, createPadFilter, createPadIdSearchFilter, publishEvent, isValidPadEvent, getPadIdFromPubkey } from '../lib/nostr'
+import { createPadEvent, createPadFilter, createPadIdSearchFilter, publishEvent, isValidPadEvent, getPadIdFromPubkey, decodePayload } from '../lib/nostr'
 import { DEBOUNCE_MS } from '../lib/constants'
 
 interface UseNostrPadOptions {
@@ -35,6 +35,8 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
 
   const poolRef = useRef<SimplePool | null>(null)
   const latestEventRef = useRef<Event | null>(null)
+  const latestTimestampRef = useRef<number>(0)
+  const latestTextRef = useRef<string>('')
   const isLocalChangeRef = useRef(false)
   const pendingPublishRef = useRef(false)
 
@@ -62,13 +64,18 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
       setFoundPublicKey(event.pubkey)
     }
 
-    // Only update if this is a newer event
-    if (!latestEventRef.current || event.created_at > latestEventRef.current.created_at) {
+    // Decode the payload to get text and timestamp
+    const payload = decodePayload(event.content)
+
+    // Only update if this is a newer event (compare embedded timestamps)
+    if (payload.timestamp > latestTimestampRef.current) {
       latestEventRef.current = event
+      latestTimestampRef.current = payload.timestamp
+      latestTextRef.current = payload.text
 
       // Don't overwrite local changes that are being typed
       if (!isLocalChangeRef.current) {
-        setContentState(event.content)
+        setContentState(payload.text)
       }
     }
   }, [padId, publicKey])
@@ -121,14 +128,14 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
     if (!canEdit || !secretKey || connectedCount === 0 || isDiscovering) return
     if (pendingPublishRef.current) return
 
-    // Don't publish if content matches latest event
-    if (latestEventRef.current && debouncedContent === latestEventRef.current.content) {
+    // Don't publish if content matches latest text
+    if (debouncedContent === latestTextRef.current) {
       isLocalChangeRef.current = false
       return
     }
 
     // Don't publish empty content on initial load
-    if (!debouncedContent && !latestEventRef.current) return
+    if (!debouncedContent && latestTimestampRef.current === 0) return
 
     const doPublish = async () => {
       pendingPublishRef.current = true
@@ -141,6 +148,10 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
           // Use discovered relays
           await publishEvent(pool, event, activeRelays)
           latestEventRef.current = event
+          // Update timestamp and text refs from the published event
+          const payload = decodePayload(event.content)
+          latestTimestampRef.current = payload.timestamp
+          latestTextRef.current = payload.text
           setLastSaved(new Date())
         }
       } catch (error) {
