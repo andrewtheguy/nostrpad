@@ -29,9 +29,14 @@ export function encodePayload(text: string, padId: string): string {
 /**
  * Decode and decrypt content from an event, extracting text and timestamp
  */
-export function decodePayload(content: string, padId: string): PadPayload {
-  const plaintext = nip44Decrypt(content, deriveConversationKeyFromPadId(padId))
-  return JSON.parse(plaintext) as PadPayload
+export function decodePayload(content: string, padId: string): PadPayload | null {
+  try {
+    const plaintext = nip44Decrypt(content, deriveConversationKeyFromPadId(padId))
+    return JSON.parse(plaintext) as PadPayload
+  } catch (error) {
+    console.warn('Failed to decode payload:', error)
+    return null
+  }
 }
 
 /**

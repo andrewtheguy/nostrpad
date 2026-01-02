@@ -59,13 +59,8 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
     }
 
     // Decode the payload to get text and timestamp
-    let payload
-    try {
-      payload = decodePayload(event.content, padId)
-    } catch (error) {
-      console.warn('Failed to decrypt payload:', error)
-      return
-    }
+    const payload = decodePayload(event.content, padId)
+    if (!payload) return
 
     // Only update if this is a newer event (compare embedded timestamps)
     if (payload.timestamp > latestTimestampRef.current) {
@@ -182,8 +177,13 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
           latestEventRef.current = event
           // Update timestamp and text refs from the published event
           const payload = decodePayload(event.content, padId)
-          latestTimestampRef.current = payload.timestamp
-          latestTextRef.current = payload.text
+          if (payload) {
+            latestTimestampRef.current = payload.timestamp
+            latestTextRef.current = payload.text
+          } else {
+            // decodePayload already handles errors; log context to avoid conflating with publish failures
+            console.warn(`Failed to decode payload for event ${event.id} (padId: ${padId})`)
+          }
           setLastSaved(new Date())
         }
       } catch (error) {

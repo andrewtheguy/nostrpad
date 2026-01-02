@@ -21,7 +21,7 @@ export function createNewPad(): PadKeys {
   const secretKey = generateSecretKey()
   const publicKey = getPublicKey(secretKey)
 
-  // padId is derived from first bytes of pubkey (for short URL)
+  // padId uses the first PAD_ID_BYTES bytes of the pubkey, encoded to PAD_ID_LENGTH (short URL identifier)
   const pubkeyBytes = hexToBytes(publicKey)
   const padId = encodeFixed(pubkeyBytes.slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
 
