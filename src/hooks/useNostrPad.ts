@@ -155,8 +155,8 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
     if (!canEdit || !secretKey || connectedCount === 0 || isDiscovering) return
     if (pendingPublishRef.current) return
 
-    // Don't publish if content matches latest text
-    if (debouncedContent === latestTextRef.current) {
+    // Don't publish if content matches latest text and we already have a known event
+    if (debouncedContent === latestTextRef.current && latestTimestampRef.current > 0) {
       isLocalChangeRef.current = false
       return
     }
