@@ -71,7 +71,7 @@ export function deriveKeys(padId: string, secret: string | null): { secretKey: U
       }
       const publicKey = getPublicKey(secretKey)
 
-      // Verify padId matches (first 6 bytes of pubkey)
+      // Verify padId matches (first PAD_ID_BYTES bytes of pubkey)
       const pubkeyBytes = hexToBytes(publicKey)
       const expectedPadId = encodeFixed(pubkeyBytes.slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
 

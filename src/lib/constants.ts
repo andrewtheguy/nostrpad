@@ -1,7 +1,7 @@
 export const NOSTRPAD_KIND = 30078
 export const D_TAG = 'nostrpad'
 
-// Pad ID format (Base56, URL-safe)
+// Pad ID format (Base59, URL-safe)
 export const PAD_ID_LENGTH = 12
 export const PAD_ID_BYTES = 8
 
@@ -20,6 +20,6 @@ export const DEBOUNCE_MS = 500
 // Character limit for pad content (16KB is safe for most relays)
 export const MAX_CONTENT_LENGTH = 16000
 
-// URL-safe Base58 alphabet with symbols mixed in for extra variety
+// URL-safe Base59 alphabet: standard Base58 plus '-' and '_' (59 characters)
 // Excludes 0, O, I, l, 1 for unambiguous characters
 export const ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz-_'
