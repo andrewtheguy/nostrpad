@@ -25,6 +25,14 @@ A simple shared notepad powered by Nostr relays. Create a pad, share the link, a
 2. Type your content - it syncs to Nostr relays after 500ms debounce
 3. Click "Share" to get the read-only URL for viewers
 4. Keep the editor URL private - anyone with it can edit
+5. Content is encrypted with NIP-44 using a key derived from the pad ID
+
+## Encryption & Privacy
+
+Pad content is encrypted before publishing using NIP-44. The encryption key is deterministically
+derived from the `padId`, which means anyone with the view-only `#padId` link can decrypt and read
+the content. This design keeps URLs short and shareable, but it is **not** confidential against
+anyone who can guess or obtain the pad ID. Treat pad IDs as semi-public identifiers, not secrets.
 
 ## Tech Stack
 

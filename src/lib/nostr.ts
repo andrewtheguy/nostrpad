@@ -1,4 +1,7 @@
 import { finalizeEvent, verifyEvent } from 'nostr-tools/pure'
+import { encrypt as nip44Encrypt, decrypt as nip44Decrypt } from 'nostr-tools/nip44'
+import { sha256 } from '@noble/hashes/sha256'
+import { utf8ToBytes } from '@noble/hashes/utils'
 import { SimplePool } from 'nostr-tools/pool'
 import type { Event } from 'nostr-tools/core'
 import type { Filter } from 'nostr-tools/filter'
@@ -8,28 +11,35 @@ import type { PadPayload } from './types'
 
 const PAD_ID_LENGTH = 8
 
+function deriveConversationKeyFromPadId(padId: string): Uint8Array {
+  // Deterministic key so anyone with the padId can decrypt.
+  return sha256(utf8ToBytes(`nostrpad:${padId}`))
+}
+
 /**
- * Encode text content into a JSON payload with timestamp
+ * Encode text content into an encrypted JSON payload with timestamp
  */
-export function encodePayload(text: string): string {
+export function encodePayload(text: string, padId: string): string {
   const payload: PadPayload = {
     text,
     timestamp: Date.now()
   }
-  return JSON.stringify(payload)
+  const plaintext = JSON.stringify(payload)
+  return nip44Encrypt(plaintext, deriveConversationKeyFromPadId(padId))
 }
 
 /**
- * Decode content from an event, extracting text and timestamp
+ * Decode and decrypt content from an event, extracting text and timestamp
  */
-export function decodePayload(content: string): PadPayload {
-  return JSON.parse(content) as PadPayload
+export function decodePayload(content: string, padId: string): PadPayload {
+  const plaintext = nip44Decrypt(content, deriveConversationKeyFromPadId(padId))
+  return JSON.parse(plaintext) as PadPayload
 }
 
 /**
  * Create a signed pad event
  */
-export function createPadEvent(text: string, secretKey: Uint8Array): Event {
+export function createPadEvent(text: string, padId: string, secretKey: Uint8Array): Event {
   const event = finalizeEvent({
     kind: NOSTRPAD_KIND,
     created_at: Math.floor(Date.now() / 1000),
@@ -37,7 +47,7 @@ export function createPadEvent(text: string, secretKey: Uint8Array): Event {
       ['d', D_TAG],
       ['client', 'nostrpad']
     ],
-    content: encodePayload(text)
+    content: encodePayload(text, padId)
   }, secretKey)
 
   return event
