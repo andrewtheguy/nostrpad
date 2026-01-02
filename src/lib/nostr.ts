@@ -5,11 +5,9 @@ import { utf8ToBytes } from '@noble/hashes/utils'
 import { SimplePool } from 'nostr-tools/pool'
 import type { Event } from 'nostr-tools/core'
 import type { Filter } from 'nostr-tools/filter'
-import { NOSTRPAD_KIND, D_TAG, BOOTSTRAP_RELAYS } from './constants'
+import { NOSTRPAD_KIND, D_TAG, BOOTSTRAP_RELAYS, PAD_ID_BYTES, PAD_ID_LENGTH } from './constants'
 import { encodeFixed } from './encoding'
 import type { PadPayload } from './types'
-
-const PAD_ID_LENGTH = 8
 
 function deriveConversationKeyFromPadId(padId: string): Uint8Array {
   // Deterministic key so anyone with the padId can decrypt.
@@ -69,7 +67,7 @@ export function isValidPadEvent(event: Event): boolean {
  */
 export function getPadIdFromPubkey(publicKey: string): string {
   const pubkeyBytes = hexToBytes(publicKey)
-  return encodeFixed(pubkeyBytes.slice(0, 6), PAD_ID_LENGTH)
+  return encodeFixed(pubkeyBytes.slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
 }
 
 /**

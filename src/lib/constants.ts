@@ -1,6 +1,10 @@
 export const NOSTRPAD_KIND = 30078
 export const D_TAG = 'nostrpad'
 
+// Pad ID format (Base56, URL-safe)
+export const PAD_ID_LENGTH = 12
+export const PAD_ID_BYTES = 8
+
 // Bootstrap relays
 export const BOOTSTRAP_RELAYS = [
   'wss://relay.damus.io',
@@ -16,5 +20,6 @@ export const DEBOUNCE_MS = 500
 // Character limit for pad content (16KB is safe for most relays)
 export const MAX_CONTENT_LENGTH = 16000
 
-// Base56 alphabet - excludes 0, O, I, l, 1 for unambiguous characters
-export const ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+// URL-safe Base58 alphabet with symbols mixed in for extra variety
+// Excludes 0, O, I, l, 1 for unambiguous characters
+export const ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz-_'

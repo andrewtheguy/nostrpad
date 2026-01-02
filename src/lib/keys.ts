@@ -1,7 +1,6 @@
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure'
 import { encode, decode, encodeFixed } from './encoding'
-
-const PAD_ID_LENGTH = 8
+import { PAD_ID_BYTES, PAD_ID_LENGTH } from './constants'
 
 export interface PadKeys {
   padId: string
@@ -22,9 +21,9 @@ export function createNewPad(): PadKeys {
   const secretKey = generateSecretKey()
   const publicKey = getPublicKey(secretKey)
 
-  // padId is derived from first 6 bytes of pubkey (for short URL)
+  // padId is derived from first bytes of pubkey (for short URL)
   const pubkeyBytes = hexToBytes(publicKey)
-  const padId = encodeFixed(pubkeyBytes.slice(0, 6), PAD_ID_LENGTH)
+  const padId = encodeFixed(pubkeyBytes.slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
 
   // secret is the full secret key encoded
   const secret = encode(secretKey)
@@ -74,7 +73,7 @@ export function deriveKeys(padId: string, secret: string | null): { secretKey: U
 
       // Verify padId matches (first 6 bytes of pubkey)
       const pubkeyBytes = hexToBytes(publicKey)
-      const expectedPadId = encodeFixed(pubkeyBytes.slice(0, 6), PAD_ID_LENGTH)
+      const expectedPadId = encodeFixed(pubkeyBytes.slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
 
       if (expectedPadId !== padId) {
         console.warn('PadId mismatch - URL may be tampered')

@@ -15,8 +15,8 @@ A simple shared notepad powered by Nostr relays. Create a pad, share the link, a
 ## URL Structure
 
 ```
-/#79ggjXVP:xK9mNpQr...   → Editor view (pad ID + secret, don't share)
-/#79ggjXVP               → Read-only view (pad ID only, shared with others)
+/#79ggjXVPkQ2z:xK9mNpQr...   → Editor view (pad ID + secret, don't share)
+/#79ggjXVPkQ2z               → Read-only view (pad ID only, shared with others)
 ```
 
 ## How It Works
@@ -62,6 +62,7 @@ npm run build
 ## Limits
 
 - Content limited to 16,000 characters (safe for most Nostr relays)
+- Pad IDs are 12 Base58 URL-safe characters (~70 bits of entropy) for low-collision sharing
 - Uses Nostr kind 30078 (replaceable application-specific events)
   - Only the latest version is stored on relays (no edit history)
   - Content may be deleted if relays prune old/inactive events
