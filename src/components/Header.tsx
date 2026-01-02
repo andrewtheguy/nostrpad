@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ShareModal } from './ShareModal'
+import { InfoModal } from './InfoModal'
 import { createNewPad } from '../lib/keys'
 
 interface HeaderProps {
@@ -13,6 +14,7 @@ interface HeaderProps {
 
 export function Header({ isSaving, canEdit, lastSaved, padId, secret, content }: HeaderProps) {
   const [showShareModal, setShowShareModal] = useState(false)
+  const [showInfoModal, setShowInfoModal] = useState(false)
   const [copied, setCopied] = useState(false)
 
   const formatLastSaved = (date: Date | null) => {
@@ -51,6 +53,15 @@ export function Header({ isSaving, canEdit, lastSaved, padId, secret, content }:
       <header className="flex items-center justify-between px-2 sm:px-4 py-2 bg-gray-800 border-b border-gray-700">
         <div className="flex items-center gap-2">
           <h1 className="text-base sm:text-lg font-semibold text-white">NostrPad</h1>
+          <button
+            type="button"
+            className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-700 text-gray-200 text-xs hover:bg-gray-600"
+            title="Encrypted with a key derived from the pad ID. Anyone with the view-only link can decrypt."
+            onClick={() => setShowInfoModal(true)}
+            aria-label="Encryption info"
+          >
+            i
+          </button>
           {!canEdit && (
             <span className="px-2 py-0.5 text-xs font-medium bg-yellow-600 text-yellow-100 rounded">View Only</span>
           )}
@@ -99,6 +110,9 @@ export function Header({ isSaving, canEdit, lastSaved, padId, secret, content }:
           secret={secret}
           onClose={() => setShowShareModal(false)}
         />
+      )}
+      {showInfoModal && (
+        <InfoModal onClose={() => setShowInfoModal(false)} />
       )}
     </>
   )
