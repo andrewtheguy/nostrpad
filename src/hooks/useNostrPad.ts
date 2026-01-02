@@ -59,7 +59,8 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
     }
 
     // Decode the payload to get text and timestamp
-    const payload = decodePayload(event.content)
+    const payload = decodePayload(event.content, padId)
+    if (!payload) return
 
     // Only update if this is a newer event (compare embedded timestamps)
     if (payload.timestamp > latestTimestampRef.current) {
@@ -168,16 +169,21 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
       setIsSaving(true)
 
       try {
-        const event = createPadEvent(debouncedContent, secretKey)
+        const event = createPadEvent(debouncedContent, padId, secretKey)
         const pool = poolRef.current
         if (pool) {
           // Use discovered relays
           await publishEvent(pool, event, activeRelays)
           latestEventRef.current = event
           // Update timestamp and text refs from the published event
-          const payload = decodePayload(event.content)
-          latestTimestampRef.current = payload.timestamp
-          latestTextRef.current = payload.text
+          const payload = decodePayload(event.content, padId)
+          if (payload) {
+            latestTimestampRef.current = payload.timestamp
+            latestTextRef.current = payload.text
+          } else {
+            // decodePayload already handles errors; log context to avoid conflating with publish failures
+            console.warn(`Failed to decode payload for event ${event.id} (padId: ${padId})`)
+          }
           setLastSaved(new Date())
         }
       } catch (error) {
