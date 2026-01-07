@@ -35,7 +35,7 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
       setKeys(derivedKeys)
       setLoading(false)
 
-      // If edit was requested but no key found, redirect to view-only URL
+      // If edit was requested but no key found or decryption failed, redirect to view-only URL
       if (isEdit && !derivedKeys?.secretKey) {
         window.location.hash = padId
       }

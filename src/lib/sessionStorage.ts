@@ -1,6 +1,7 @@
 const DB_NAME = 'nostrpad-sessions'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const STORE_NAME = 'sessions'
+const GLOBAL_KEY = 'all-sessions'
 
 interface SessionData {
   padId: string
@@ -19,8 +20,7 @@ export async function initDB(): Promise<IDBDatabase> {
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       if (!db.objectStoreNames.contains(STORE_NAME)) {
-        const store = db.createObjectStore(STORE_NAME, { keyPath: 'padId' })
-        store.createIndex('padId', 'padId', { unique: true })
+        db.createObjectStore(STORE_NAME)
       }
     }
   })
@@ -39,7 +39,7 @@ export async function storeSession(padId: string, encryptedPrivateKey: Uint8Arra
   }
 
   return new Promise((resolve, reject) => {
-    const request = store.put(data)
+    const request = store.put(data, GLOBAL_KEY)
     request.onsuccess = () => resolve()
     request.onerror = () => reject(request.error)
   })
@@ -51,10 +51,10 @@ export async function getSession(padId: string): Promise<{ encryptedPrivateKey: 
   const store = transaction.objectStore(STORE_NAME)
 
   return new Promise((resolve, reject) => {
-    const request = store.get(padId)
+    const request = store.get(GLOBAL_KEY)
     request.onsuccess = () => {
-      const result = request.result
-      if (result) {
+      const result: SessionData | undefined = request.result
+      if (result && result.padId === padId) {
         resolve({
           encryptedPrivateKey: result.encryptedPrivateKey,
           aesKey: result.aesKey,
