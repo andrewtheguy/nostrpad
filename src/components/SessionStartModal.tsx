@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createNewPad } from '../lib/keys'
-import { createAndStoreSession } from '../lib/sessionStorage'
+import { createAndStoreSession, getStoredSession } from '../lib/sessionStorage'
 import { getPublicKey } from 'nostr-tools/pure'
 import { decode, encodeFixed } from '../lib/encoding'
 import { PAD_ID_BYTES, PAD_ID_LENGTH } from '../lib/constants'
@@ -28,8 +28,20 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
   const [newPadData, setNewPadData] = useState<{ padId: string; secret: string } | null>(null)
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState(false)
+  const [lastSessionPadId, setLastSessionPadId] = useState<string | null>(null)
+
+  useEffect(() => {
+    getStoredSession().then(session => {
+      setLastSessionPadId(session?.padId || null)
+    }).catch(error => {
+      console.error('Failed to get stored session:', error)
+    })
+  }, [])
 
   const handleStartNewSession = async () => {
+    if (lastSessionPadId && !confirm('Starting a new session will clear your saved session. Are you sure?')) {
+      return
+    }
     setIsCreating(true)
     try {
       const newPad = createNewPad()
@@ -79,6 +91,12 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
       console.error('Failed to import session:', error)
       setImportError('Invalid secret key')
     }
+  }
+
+  const handleResumeLastSession = () => {
+    if (!lastSessionPadId) return
+    window.location.hash = `${lastSessionPadId}:rw`
+    onSessionStarted({ padId: lastSessionPadId, isEdit: true })
   }
 
   const copySecret = async () => {
@@ -172,6 +190,14 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
           Choose how to start your session:
         </p>
         <div className="space-y-3">
+          {lastSessionPadId && (
+            <button
+              onClick={handleResumeLastSession}
+              className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              Resume Last Session: {lastSessionPadId}
+            </button>
+          )}
           <button
             onClick={handleStartNewSession}
             disabled={isCreating}

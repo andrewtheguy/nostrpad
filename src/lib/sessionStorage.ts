@@ -89,6 +89,21 @@ export async function getSession(padId: string): Promise<{ encryptedPrivateKey: 
   })
 }
 
+export async function getStoredSession(): Promise<SessionData | null> {
+  const db = await initDB()
+  const transaction = db.transaction([STORE_NAME], 'readonly')
+  const store = transaction.objectStore(STORE_NAME)
+
+  return new Promise((resolve, reject) => {
+    const request = store.get(GLOBAL_KEY)
+    request.onsuccess = () => {
+      const result: SessionData | undefined = request.result
+      resolve(result || null)
+    }
+    request.onerror = () => reject(request.error)
+  })
+}
+
 export async function encryptPrivateKey(privateKey: Uint8Array): Promise<{ encrypted: Uint8Array, key: CryptoKey, iv: Uint8Array }> {
   const key = await crypto.subtle.generateKey(
     {
