@@ -43,6 +43,34 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
     onLogoutSignal: handleLogout
   })
 
+  // Enforce single-tab editor
+  useEffect(() => {
+    if (!canEdit || !padId) return
+
+    const channelName = `nostrpad-editor-${padId}`
+    const channel = new BroadcastChannel(channelName)
+
+    // Notify other tabs that we are taking over
+    channel.postMessage('NEW_EDITOR')
+
+    channel.onmessage = (event) => {
+      if (event.data === 'NEW_EDITOR') {
+        // Another tab has opened this pad in edit mode
+        // Redirect to home immediately
+        window.location.hash = ''
+
+        // Show alert after a brief delay to allow the redirect (UI update) to happen first
+        setTimeout(() => {
+          alert('Edit session opened in another tab. This tab has been closed.')
+        }, 100)
+      }
+    }
+
+    return () => {
+      channel.close()
+    }
+  }, [canEdit, padId])
+
   const loadKeys = useCallback(async () => {
     try {
       const derivedKeys = await deriveKeys(padId, isEdit)
