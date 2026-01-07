@@ -3,13 +3,15 @@ import { SimplePool } from 'nostr-tools/pool'
 import type { Event } from 'nostr-tools/core'
 import { useDebounce } from './useDebounce'
 import { useRelayDiscovery } from './useRelayDiscovery'
-import { createPadEvent, createPadIdSearchFilter, publishEvent, isValidPadEvent, getPadIdFromPubkey, decodePayload } from '../lib/nostr'
-import { DEBOUNCE_MS } from '../lib/constants'
+import { createPadEvent, createPadIdSearchFilter, publishEvent, isValidPadEvent, getPadIdFromPubkey, decodePayload, isValidLogoutEvent } from '../lib/nostr'
+import { DEBOUNCE_MS, LOGOUT_KIND } from '../lib/constants'
 
 interface UseNostrPadOptions {
   padId: string
   publicKey: string
   secretKey: Uint8Array | null
+  sessionCreatedAt?: number
+  onLogoutSignal?: () => void
 }
 
 interface UseNostrPadReturn {
@@ -24,7 +26,7 @@ interface UseNostrPadReturn {
   isDiscovering: boolean
 }
 
-export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions): UseNostrPadReturn {
+export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onLogoutSignal }: UseNostrPadOptions): UseNostrPadReturn {
   const [content, setContentState] = useState('')
   const [relayStatus, setRelayStatus] = useState<Map<string, boolean>>(new Map())
   const [isSaving, setIsSaving] = useState(false)
@@ -50,6 +52,23 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
 
   // Handle incoming events
   const handleEvent = useCallback((event: Event) => {
+    // Check for logout signal
+    if (canEdit && isValidLogoutEvent(event) && onLogoutSignal && sessionCreatedAt) {
+      // Logic: If we see a logout event that was created AFTER our session started,
+      // it means a newer session was created elsewhere. We should logout.
+      // event.created_at is in seconds.
+      const eventTimeMs = event.created_at * 1000
+
+      // If event happened strictly after our session creation, we are the old session.
+      // If event happened before or equal, it might be the event WE published (equal) 
+      // or an old event (before).
+      if (eventTimeMs > sessionCreatedAt) {
+        console.log('Received logout signal from newer session', { eventTimeMs, sessionCreatedAt })
+        onLogoutSignal()
+        return
+      }
+    }
+
     if (!isValidPadEvent(event)) return
 
     // For view-only mode, check if this event's pubkey matches our padId
@@ -74,7 +93,7 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
         setContentState(payload.text)
       }
     }
-  }, [padId, publicKey])
+  }, [padId, publicKey, canEdit, sessionCreatedAt, onLogoutSignal])
 
   // Reset state and refs when padId changes
   useEffect(() => {
@@ -106,7 +125,7 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
     sessionStorage.setItem(storageKey, content)
   }, [canEdit, content, storageKey])
 
-  // Initialize pool for editor mode (publish-only, no subscription)
+  // Initialize pool for editor mode (publish AND listen for logout)
   useEffect(() => {
     if (isDiscovering || activeRelays.length === 0) return
     if (!canEdit) return
@@ -114,9 +133,17 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
     const pool = new SimplePool()
     poolRef.current = pool
 
-    // Ensure connections are established to all relays
-    activeRelays.forEach(relay => {
-      pool.ensureRelay(relay)
+    // Subscribe to logout events (Kind 21000)
+    const filter = {
+      kinds: [LOGOUT_KIND],
+      '#d': [padId]
+    }
+
+    const sub = pool.subscribe(activeRelays, filter, {
+      onevent: handleEvent,
+      oneose: () => {
+        setRelayStatus(new Map(pool.listConnectionStatus()))
+      }
     })
 
     // Poll connection status periodically
@@ -127,9 +154,10 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
 
     return () => {
       clearInterval(statusInterval)
+      sub.close()
       pool.close(activeRelays)
     }
-  }, [canEdit, activeRelays, isDiscovering])
+  }, [canEdit, activeRelays, isDiscovering, padId, handleEvent])
 
   // Initialize pool and subscribe for view-only mode
   useEffect(() => {

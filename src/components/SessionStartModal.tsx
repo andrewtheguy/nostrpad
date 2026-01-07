@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { createNewPad } from '../lib/keys'
 import { createAndStoreSession, getVerifiedStoredSession, clearSession } from '../lib/sessionStorage'
 import { getPublicKey } from 'nostr-tools/pure'
+import { SimplePool } from 'nostr-tools/pool'
+import { createLogoutEvent, publishEvent } from '../lib/nostr'
 import { decode, encodeFixed } from '../lib/encoding'
 import { PAD_ID_BYTES, PAD_ID_LENGTH } from '../lib/constants'
 
@@ -128,7 +130,37 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
       const pubkeyBytes = hexToBytes(publicKey)
       const padId = encodeFixed(pubkeyBytes.slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
 
-      await createAndStoreSession(padId, secretKey)
+      // 1. Create logout event
+      const logoutEvent = createLogoutEvent(padId, secretKey)
+
+      // 2. Publish to relays to notify other devices
+      // We use a temporary pool here just for this action
+      const pool = new SimplePool()
+      try {
+        await publishEvent(pool, logoutEvent)
+      } catch (err) {
+        console.warn('Failed to publish logout event, continuing anyway:', err)
+      } finally {
+        // We don't need to keep connections open
+        // But SimplePool doesn't have a 'close all' easily accessible or we just let it be GC'd or use close() if avail.
+        // publishEvent handles its own promises but pool connections might hang around. 
+        // SimplePool in nostr-tools v2 (pure) might differ. 
+        // Checking imports... 'nostr-tools/pool'. 
+        // We should probably close connections if possible, but publishEvent in this codebase 
+        // uses pool.publish([relay], event) and returns promises. 
+        // We can just rely on publishEvent helper.
+      }
+
+      // 3. Store new session
+      // Ensure session timestamp is strictly greater than event timestamp to avoid self-logout
+      // event.created_at is in seconds floor. 
+      // We use Date.now() which is ms. 
+      // Ideally wait 1s or just add 1000ms to ensure safety margin if clocks are weird?
+      // Actually standard Date.now() > event.created_at * 1000 is usually true if done after.
+      // Let's add 1000ms to be safe against clock skew/rounding.
+      const sessionTimestamp = (logoutEvent.created_at * 1000) + 1000
+
+      await createAndStoreSession(padId, secretKey, sessionTimestamp)
       window.location.hash = `${padId}:rw`
       onSessionStarted()
     } catch (error) {

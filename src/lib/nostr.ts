@@ -61,8 +61,32 @@ export function createPadEvent(text: string, padId: string, secretKey: Uint8Arra
  */
 export function isValidPadEvent(event: Event): boolean {
   return (
-    event.kind === NOSTRPAD_KIND &&
-    event.tags.some(t => t[0] === 'd' && t[1] === D_TAG) &&
+    verifyEvent(event)
+  )
+}
+
+/**
+ * Create a logout event (ephemeral)
+ */
+export function createLogoutEvent(padId: string, secretKey: Uint8Array): Event {
+  return finalizeEvent({
+    kind: 21000,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [
+      ['d', padId],
+      ['client', 'nostrpad']
+    ],
+    content: 'logout'
+  }, secretKey)
+}
+
+/**
+ * Verify a logout event
+ */
+export function isValidLogoutEvent(event: Event): boolean {
+  return (
+    event.kind === 21000 &&
+    event.tags.some(t => t[0] === 'd') &&
     verifyEvent(event)
   )
 }

@@ -1,4 +1,5 @@
 export const NOSTRPAD_KIND = 30078
+export const LOGOUT_KIND = 21000
 export const D_TAG = 'nostrpad'
 
 // Pad ID format (Base59, URL-safe)

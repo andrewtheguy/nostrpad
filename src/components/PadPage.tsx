@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { deriveKeys } from '../lib/keys'
 import { useNostrPad } from '../hooks/useNostrPad'
-import { getVerifiedStoredSession } from '../lib/sessionStorage'
+import { getVerifiedStoredSession, clearSession } from '../lib/sessionStorage'
 import { Header } from './Header'
 import { Editor } from './Editor'
 import { Footer } from './Footer'
@@ -12,12 +12,19 @@ interface PadPageProps {
 }
 
 export function PadPage({ padId, isEdit }: PadPageProps) {
-  const [keys, setKeys] = useState<{ secretKey: Uint8Array | null, publicKey: string } | null>(null)
+  const [keys, setKeys] = useState<{ secretKey: Uint8Array | null, publicKey: string, sessionCreatedAt?: number } | null>(null)
   const [loading, setLoading] = useState(true)
   const [editModeFailed, setEditModeFailed] = useState(false)
   const [isRetrying, setIsRetrying] = useState(false)
   const [hasMatchingSession, setHasMatchingSession] = useState(false)
   const isMountedRef = useRef(true)
+
+  const handleLogout = useCallback(async () => {
+    alert('Session invalidated: This pad was opened in editor mode on another device.')
+    await clearSession()
+    window.location.hash = padId
+    window.location.reload()
+  }, [padId])
 
   const {
     content,
@@ -31,7 +38,9 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
   } = useNostrPad({
     padId,
     publicKey: keys?.publicKey || '',
-    secretKey: keys?.secretKey || null
+    secretKey: keys?.secretKey || null,
+    sessionCreatedAt: keys?.sessionCreatedAt,
+    onLogoutSignal: handleLogout
   })
 
   const loadKeys = useCallback(async () => {
