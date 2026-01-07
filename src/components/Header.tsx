@@ -21,7 +21,7 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content }: HeaderP
     return date.toLocaleTimeString()
   }
 
-  const handleNewPad = () => {
+  const handleHome = () => {
     window.location.href = '/'
   }
 
@@ -75,11 +75,12 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content }: HeaderP
             <span className="px-2 py-0.5 text-xs font-medium bg-yellow-600 text-yellow-100 rounded">View Only</span>
           )}
           <button
-            onClick={handleNewPad}
+            onClick={handleHome}
             className="px-1.5 sm:px-2 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors"
+            title="Home"
           >
-            <span className="sm:hidden">+</span>
-            <span className="hidden sm:inline">+ New</span>
+            <span className="sm:hidden">🏠</span>
+            <span className="hidden sm:inline">Home</span>
           </button>
         </div>
 
