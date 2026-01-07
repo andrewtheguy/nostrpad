@@ -94,7 +94,8 @@ export function ShareModal({ padId, onClose }: ShareModalProps) {
               </button>
             </div>
             <p className="text-xs text-gray-500">
-              Share this link with authorized editors who have an active session.
+              This URL requests edit mode, but editing requires the secret key.
+              To grant edit access to others, share your secret key (they can import it).
             </p>
           </div>
         </div>

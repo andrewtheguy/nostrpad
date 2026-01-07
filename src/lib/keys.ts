@@ -16,7 +16,9 @@ export interface ParsedUrl {
 }
 
 /**
- * Create a new pad with fresh keypair
+ * Create a new pad with fresh keypair.
+ * Note: This only generates keys - caller must persist via createAndStoreSession()
+ * from sessionStorage.ts before the secretKey can be retrieved by deriveKeys().
  */
 export function createNewPad(): PadKeys {
   const secretKey = generateSecretKey()

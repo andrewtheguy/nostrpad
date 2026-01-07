@@ -37,6 +37,7 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
   const latestTextRef = useRef<string>('')
   const isLocalChangeRef = useRef(false)
   const pendingPublishRef = useRef(false)
+  const currentPadIdRef = useRef(padId)
 
   const canEdit = secretKey !== null
   const storageKey = `nostrpad:${padId}`
@@ -77,6 +78,7 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
 
   // Reset state and refs when padId changes
   useEffect(() => {
+    currentPadIdRef.current = padId
     setContentState('')
     setFoundPublicKey(publicKey || null)
     setLastSaved(null)
@@ -177,33 +179,44 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
     if (!debouncedContent && latestTimestampRef.current === 0) return
 
     const doPublish = async () => {
+      // Capture padId at start to detect stale publishes
+      const publishPadId = padId
       pendingPublishRef.current = true
       setIsSaving(true)
 
       try {
-        const event = createPadEvent(debouncedContent, padId, secretKey)
+        const event = createPadEvent(debouncedContent, publishPadId, secretKey)
         const pool = poolRef.current
         if (pool) {
           // Use discovered relays
           await publishEvent(pool, event, activeRelays)
+
+          // Check if padId changed during async operation - don't pollute new pad's state
+          if (currentPadIdRef.current !== publishPadId) {
+            return
+          }
+
           latestEventRef.current = event
           // Update timestamp and text refs from the published event
-          const payload = decodePayload(event.content, padId)
+          const payload = decodePayload(event.content, publishPadId)
           if (payload) {
             latestTimestampRef.current = payload.timestamp
             latestTextRef.current = payload.text
           } else {
             // decodePayload already handles errors; log context to avoid conflating with publish failures
-            console.warn(`Failed to decode payload for event ${event.id} (padId: ${padId})`)
+            console.warn(`Failed to decode payload for event ${event.id} (padId: ${publishPadId})`)
           }
           setLastSaved(new Date())
         }
       } catch (error) {
         console.error('Failed to publish:', error)
       } finally {
-        setIsSaving(false)
-        isLocalChangeRef.current = false
-        pendingPublishRef.current = false
+        // Only reset flags if still on the same pad
+        if (currentPadIdRef.current === publishPadId) {
+          setIsSaving(false)
+          isLocalChangeRef.current = false
+          pendingPublishRef.current = false
+        }
       }
     }
 
