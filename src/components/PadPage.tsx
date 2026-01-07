@@ -51,7 +51,8 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
     isSaving,
     canEdit,
     lastSaved,
-    isDiscovering
+    isDiscovering,
+    isLoadingContent
   } = useNostrPad({
     padId,
     publicKey: keys?.publicKey || '',
@@ -279,11 +280,12 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
         lastSaved={lastSaved}
         padId={padId}
         content={content}
+        isLoadingContent={isLoadingContent}
       />
       <Editor
         content={content}
         onChange={setContent}
-        readOnly={!canEdit}
+        readOnly={!canEdit || isLoadingContent}
       />
       <Footer
         content={content}

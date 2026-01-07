@@ -25,6 +25,7 @@ interface UseNostrPadReturn {
   lastSaved: Date | null
   foundPublicKey: string | null
   isDiscovering: boolean
+  isLoadingContent: boolean
 }
 
 export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onLogoutSignal, isBlocked = false }: UseNostrPadOptions): UseNostrPadReturn {
@@ -33,6 +34,7 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
   const [isSaving, setIsSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [foundPublicKey, setFoundPublicKey] = useState<string | null>(publicKey || null)
+  const [isLoadingContent, setIsLoadingContent] = useState(secretKey !== null)
 
   const poolRef = useRef<SimplePool | null>(null)
   const latestEventRef = useRef<Event | null>(null)
@@ -102,12 +104,13 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
     setFoundPublicKey(publicKey || null)
     setLastSaved(null)
     setIsSaving(false)
+    setIsLoadingContent(canEdit) // true if edit mode (need to fetch), false otherwise
     latestEventRef.current = null
     latestTimestampRef.current = 0
     latestTextRef.current = ''
     isLocalChangeRef.current = false
     pendingPublishRef.current = false
-  }, [padId, publicKey])
+  }, [padId, publicKey, canEdit])
 
   // Initialize pool for editor mode (publish AND listen for logout)
   useEffect(() => {
@@ -118,6 +121,7 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
     poolRef.current = pool
 
     // Fetch latest content once (don't subscribe to avoid unexpected updates while editing)
+    setIsLoadingContent(true)
     const contentFilter = {
       kinds: [NOSTRPAD_KIND],
       authors: [publicKey],
@@ -143,6 +147,8 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
           }
         }
       }
+    }).finally(() => {
+      setIsLoadingContent(false)
     })
 
     // Subscribe to logout events only (Kind 21000)
@@ -266,10 +272,10 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
 
   // Set content handler
   const setContent = useCallback((newContent: string) => {
-    if (!canEdit || isBlocked) return
+    if (!canEdit || isBlocked || isLoadingContent) return
     isLocalChangeRef.current = true
     setContentState(newContent)
-  }, [canEdit, isBlocked])
+  }, [canEdit, isBlocked, isLoadingContent])
 
   return {
     content,
@@ -280,6 +286,7 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
     canEdit,
     lastSaved,
     foundPublicKey,
-    isDiscovering
+    isDiscovering,
+    isLoadingContent
   }
 }

@@ -245,10 +245,10 @@ Content Change
 ```
 
 **Key behaviors:**
-- Editor mode: Publish-only, no subscription
+- Editor mode: One-time content fetch on init, then subscribe to logout events only
 - Viewer mode: Subscribe to all kind 30078 events, filter by padId match
 - Debounced publishing (500ms) to avoid relay spam
-- Session storage backup of content
+- Nostr relay is the sole source of truth for content (no local caching)
 - Ref-based state to prevent stale closures
 
 ### useRelayDiscovery Hook
@@ -270,10 +270,18 @@ Returns list of responsive relays for use by useNostrPad.
 ### Publishing (Edit Mode)
 
 ```
+Component Mount
+    │
+    ▼
+pool.querySync(relays, contentFilter)
+    │
+    └─► Fetch latest content event once
+    │
+    ▼
 User Types
     │
     ▼
-setContent() ─► sessionStorage backup
+setContent()
     │
     ▼ (500ms debounce)
     │
