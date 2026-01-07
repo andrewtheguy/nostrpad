@@ -75,12 +75,13 @@ export function parseUrl(hash: string): ParsedUrl {
  * Derive keys from padId and edit intent, checking IndexedDB for stored session
  * Falls back to view-only mode if edit is requested but no valid session exists or on errors
  */
-export async function deriveKeys(padId: string, isEdit: boolean): Promise<{ secretKey: Uint8Array | null, publicKey: string }> {
+export async function deriveKeys(padId: string, isEdit: boolean): Promise<{ secretKey: Uint8Array | null, publicKey: string, sessionCreatedAt?: number }> {
   try {
     if (isEdit) {
       // Edit mode requested: check if we have a stored session for this padId
-      const storedSecretKey = await getDecryptedPrivateKey(padId)
-      if (storedSecretKey) {
+      const stored = await getDecryptedPrivateKey(padId)
+      if (stored) {
+        const { privateKey: storedSecretKey, createdAt } = stored
         // We have the secret key from storage
         if (storedSecretKey.length !== 32) {
           return { secretKey: null, publicKey: '' }
@@ -96,7 +97,7 @@ export async function deriveKeys(padId: string, isEdit: boolean): Promise<{ secr
           return { secretKey: null, publicKey: '' }
         }
 
-        return { secretKey: storedSecretKey, publicKey }
+        return { secretKey: storedSecretKey, publicKey, sessionCreatedAt: createdAt }
       } else {
         // Edit requested but no stored session: view-only
         return { secretKey: null, publicKey: '' }

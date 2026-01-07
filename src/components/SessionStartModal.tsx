@@ -2,6 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { createNewPad } from '../lib/keys'
 import { createAndStoreSession, getVerifiedStoredSession, clearSession } from '../lib/sessionStorage'
 import { getPublicKey } from 'nostr-tools/pure'
+import { SimplePool } from 'nostr-tools/pool'
+import { BOOTSTRAP_RELAYS } from '../lib/constants'
+import { createLogoutEvent, publishEvent } from '../lib/nostr'
 import { decode, encodeFixed } from '../lib/encoding'
 import { PAD_ID_BYTES, PAD_ID_LENGTH } from '../lib/constants'
 
@@ -45,17 +48,60 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
   const [createError, setCreateError] = useState('')
   const [showSecretError, setShowSecretError] = useState('')
   const [isConfirming, setIsConfirming] = useState(false)
+  const [lastSessionCreatedAt, setLastSessionCreatedAt] = useState<number>(0)
+  const [sessionEndedByRemote, setSessionEndedByRemote] = useState(false)
 
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     getVerifiedStoredSession().then(result => {
       // Only show padId if integrity verification passes
-      setLastSessionPadId(result?.session.padId || null)
+      if (result) {
+        setLastSessionPadId(result.session.padId)
+        setLastSessionCreatedAt(result.session.createdAt)
+      } else {
+        setLastSessionPadId(null)
+      }
     }).catch(error => {
       console.error('Failed to get stored session:', error)
     })
   }, [])
+
+  // Listen for logout events while on this screen
+  useEffect(() => {
+    if (!lastSessionPadId || !lastSessionCreatedAt) return
+
+    const pool = new SimplePool()
+
+    // We need to find the relay list. We can use bootstrap relays for now as we don't have active relays discovered yet.
+    // In a real app we might want to discover first, but bootstrap is fine for the landing page check.
+    const relays = BOOTSTRAP_RELAYS
+
+    // Only fetch logout events around our session creation time (with 2 min padding for clock skew)
+    const since = Math.floor(lastSessionCreatedAt / 1000) - 120
+
+    const sub = pool.subscribe(relays, {
+      kinds: [21000],
+      '#d': [lastSessionPadId],
+      since
+    }, {
+      onevent: (event) => {
+        // Check if this event invalidates our session
+        const eventTimeMs = event.created_at * 1000
+        if (eventTimeMs > lastSessionCreatedAt) {
+          console.log('Session invalidated by remote device')
+          setLastSessionPadId(null)
+          clearSession().catch(console.error)
+          setSessionEndedByRemote(true)
+        }
+      }
+    })
+
+    return () => {
+      sub.close()
+      pool.close(relays)
+    }
+  }, [lastSessionPadId, lastSessionCreatedAt])
 
   // Cleanup copy timeout on unmount
   useEffect(() => {
@@ -128,12 +174,39 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
       const pubkeyBytes = hexToBytes(publicKey)
       const padId = encodeFixed(pubkeyBytes.slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
 
-      await createAndStoreSession(padId, secretKey)
+      // 1. Create logout event
+      const logoutEvent = createLogoutEvent(padId, secretKey)
+
+      // 2. Publish to relays to notify other devices
+      // We use a temporary pool here just for this action
+      const pool = new SimplePool()
+      try {
+        await publishEvent(pool, logoutEvent)
+      } catch (err) {
+        console.warn('Failed to publish logout event, continuing anyway:', err)
+      } finally {
+        pool.close(BOOTSTRAP_RELAYS)
+      }
+
+      // 3. Store new session
+      // Ensure session timestamp is strictly greater than event timestamp to avoid self-logout
+      // event.created_at is in seconds floor. 
+      // We use Date.now() which is ms. 
+      // Ideally wait 1s or just add 1000ms to ensure safety margin if clocks are weird?
+      // Actually standard Date.now() > event.created_at * 1000 is usually true if done after.
+      // Let's add 1000ms to be safe against clock skew/rounding.
+      const sessionTimestamp = (logoutEvent.created_at * 1000) + 1000
+
+      await createAndStoreSession(padId, secretKey, sessionTimestamp)
       window.location.hash = `${padId}:rw`
       onSessionStarted()
     } catch (error) {
       console.error('Failed to import session:', error)
-      setImportError('Invalid secret key')
+      if (error instanceof Error) {
+        setImportError(error.message)
+      } else {
+        setImportError('Failed to import session. Please check console for details.')
+      }
     }
   }
 
@@ -304,6 +377,11 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
         <p className="text-gray-300 mb-6">
           Choose how to start your session:
         </p>
+        {sessionEndedByRemote && (
+          <div className="bg-yellow-900/50 border border-yellow-600 rounded-lg p-3 mb-4">
+            <p className="text-yellow-200 text-sm">Your saved session was ended by another device.</p>
+          </div>
+        )}
         {createError && (
           <p className="text-red-400 text-sm mb-4">{createError}</p>
         )}
@@ -340,6 +418,11 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
               Clear Saved Session
             </button>
           )}
+          <div className="pt-4 border-t border-gray-700">
+            <p className="text-gray-400 text-xs italic text-center">
+              Note: NostrPad is designed for temporary sharing rather than long-term storage. Sessions and data are ephemeral and may be purged periodically. Always have a backup of your data that you want to keep elsewhere.
+            </p>
+          </div>
         </div>
       </div>
     </div>

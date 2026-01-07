@@ -9,10 +9,9 @@ interface ShareModalProps {
 
 export function ShareModal({ padId, onClose }: ShareModalProps) {
   const [copiedViewer, setCopiedViewer] = useState(false)
-  const [copiedEditor, setCopiedEditor] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
-  const { viewerUrl, editorUrl } = generateShareUrls(padId)
+  const { viewerUrl } = generateShareUrls(padId)
 
   useEffect(() => {
     if (canvasRef.current) {
@@ -38,7 +37,6 @@ export function ShareModal({ padId, onClose }: ShareModalProps) {
   }
 
   const copyViewerUrl = () => copyToClipboard(viewerUrl, setCopiedViewer)
-  const copyEditorUrl = () => copyToClipboard(editorUrl, setCopiedEditor)
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
@@ -70,33 +68,9 @@ export function ShareModal({ padId, onClose }: ShareModalProps) {
             <p className="text-xs text-gray-500 mb-4">
               Share this link with anyone who should view the pad.
             </p>
-            <div className="flex justify-center mb-4">
+            <div className="flex justify-center">
               <canvas ref={canvasRef} className="rounded" />
             </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Editor URL (Read/Write)
-            </label>
-            <div className="flex gap-2 mb-3">
-              <input
-                type="text"
-                readOnly
-                value={editorUrl}
-                className="flex-1 px-3 py-2 bg-gray-700 text-gray-100 rounded text-sm font-mono"
-              />
-              <button
-                onClick={copyEditorUrl}
-                className="px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded text-sm transition-colors"
-              >
-                {copiedEditor ? 'Copied!' : 'Copy'}
-              </button>
-            </div>
-            <p className="text-xs text-gray-500">
-              This URL requests edit mode, but editing requires the secret key.
-              To grant edit access to others, share your secret key (they can import it).
-            </p>
           </div>
         </div>
 

@@ -1,5 +1,5 @@
 const DB_NAME = 'nostrpad-sessions'
-const DB_VERSION = 3
+const DB_VERSION = 4
 const STORE_NAME = 'sessions'
 const GLOBAL_KEY = 'current-session'
 
@@ -10,22 +10,29 @@ interface SessionData {
   encryptedPrivateKey: Uint8Array
   aesKey: CryptoKey
   iv: Uint8Array
-  integrityTag?: Uint8Array // SHA-256 hash binding padId to encrypted data
+  createdAt: number
+  integrityTag?: Uint8Array // SHA-256 hash binding padId + createdAt to encrypted data
 }
 
 /**
- * Compute integrity tag: SHA-256(padId + iv + encryptedPrivateKey)
- * This binds the padId to the encrypted data, preventing tampering
+ * Compute integrity tag: SHA-256(padId + createdAt + iv + encryptedPrivateKey)
+ * This binds the padId and timestamp to the encrypted data, preventing tampering
  */
-async function computeIntegrityTag(padId: string, iv: Uint8Array, encryptedPrivateKey: Uint8Array): Promise<Uint8Array> {
+async function computeIntegrityTag(padId: string, createdAt: number, iv: Uint8Array, encryptedPrivateKey: Uint8Array): Promise<Uint8Array> {
   const encoder = new TextEncoder()
   const padIdBytes = encoder.encode(padId)
 
-  // Concatenate: padId bytes + iv + encrypted data
-  const combined = new Uint8Array(padIdBytes.length + iv.length + encryptedPrivateKey.length)
+  // Convert timestamp to 8 bytes (BigInt64)
+  const timestampBytes = new Uint8Array(8)
+  const view = new DataView(timestampBytes.buffer)
+  view.setBigInt64(0, BigInt(createdAt), false) // Big-endian
+
+  // Concatenate: padId bytes + timestamp + iv + encrypted data
+  const combined = new Uint8Array(padIdBytes.length + timestampBytes.length + iv.length + encryptedPrivateKey.length)
   combined.set(padIdBytes, 0)
-  combined.set(iv, padIdBytes.length)
-  combined.set(encryptedPrivateKey, padIdBytes.length + iv.length)
+  combined.set(timestampBytes, padIdBytes.length)
+  combined.set(iv, padIdBytes.length + timestampBytes.length)
+  combined.set(encryptedPrivateKey, padIdBytes.length + timestampBytes.length + iv.length)
 
   const hash = await crypto.subtle.digest('SHA-256', combined)
   return new Uint8Array(hash)
@@ -35,12 +42,12 @@ async function computeIntegrityTag(padId: string, iv: Uint8Array, encryptedPriva
  * Verify integrity tag matches the stored data
  */
 async function verifyIntegrityTag(session: SessionData): Promise<boolean> {
-  if (!session.integrityTag) {
-    // Legacy session without integrity tag - cannot verify
+  if (!session.integrityTag || !session.createdAt) {
+    // Legacy session without integrity tag or timestamp - invalid
     return false
   }
 
-  const computed = await computeIntegrityTag(session.padId, session.iv, session.encryptedPrivateKey)
+  const computed = await computeIntegrityTag(session.padId, session.createdAt, session.iv, session.encryptedPrivateKey)
 
   if (computed.length !== session.integrityTag.length) {
     return false
@@ -79,9 +86,13 @@ export async function initDB(): Promise<IDBDatabase> {
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME)
+      // Clear database on upgrade to ensure clean state
+      // This is acceptable because NostrPad is designed for temporary sharing,
+      // not permanent storage. Users should expect sessions to be ephemeral.
+      if (db.objectStoreNames.contains(STORE_NAME)) {
+        db.deleteObjectStore(STORE_NAME)
       }
+      db.createObjectStore(STORE_NAME)
     }
   })
 
@@ -89,19 +100,20 @@ export async function initDB(): Promise<IDBDatabase> {
   return promise
 }
 
-export async function storeSession(padId: string, encryptedPrivateKey: Uint8Array, aesKey: CryptoKey, iv: Uint8Array): Promise<void> {
+export async function storeSession(padId: string, encryptedPrivateKey: Uint8Array, aesKey: CryptoKey, iv: Uint8Array, createdAt: number = Date.now()): Promise<void> {
   const db = await initDB()
   const transaction = db.transaction([STORE_NAME], 'readwrite')
   const store = transaction.objectStore(STORE_NAME)
 
-  // Compute integrity tag to bind padId to encrypted data
-  const integrityTag = await computeIntegrityTag(padId, iv, encryptedPrivateKey)
+  // Compute integrity tag to bind padId and timestamp to encrypted data
+  const integrityTag = await computeIntegrityTag(padId, createdAt, iv, encryptedPrivateKey)
 
   const data: SessionData = {
     padId,
     encryptedPrivateKey,
     aesKey,
     iv,
+    createdAt,
     integrityTag
   }
 
@@ -137,7 +149,7 @@ export async function storeSession(padId: string, encryptedPrivateKey: Uint8Arra
   })
 }
 
-export async function getSession(padId: string): Promise<{ encryptedPrivateKey: Uint8Array, aesKey: CryptoKey, iv: Uint8Array } | null> {
+export async function getSession(padId: string): Promise<{ encryptedPrivateKey: Uint8Array, aesKey: CryptoKey, iv: Uint8Array, createdAt: number } | null> {
   const result = await getVerifiedStoredSession()
 
   if (!result || result.session.padId !== padId) {
@@ -148,7 +160,8 @@ export async function getSession(padId: string): Promise<{ encryptedPrivateKey: 
   return {
     encryptedPrivateKey: session.encryptedPrivateKey,
     aesKey: session.aesKey,
-    iv: session.iv
+    iv: session.iv,
+    createdAt: session.createdAt
   }
 }
 
@@ -225,17 +238,18 @@ export async function decryptPrivateKey(encrypted: Uint8Array, key: CryptoKey, i
   return new Uint8Array(decrypted)
 }
 
-export async function createAndStoreSession(padId: string, privateKey: Uint8Array): Promise<void> {
+export async function createAndStoreSession(padId: string, privateKey: Uint8Array, createdAt: number = Date.now()): Promise<void> {
   const { encrypted, key, iv } = await encryptPrivateKey(privateKey)
-  await storeSession(padId, encrypted, key, iv)
+  await storeSession(padId, encrypted, key, iv, createdAt)
 }
 
-export async function getDecryptedPrivateKey(padId: string): Promise<Uint8Array | null> {
+export async function getDecryptedPrivateKey(padId: string): Promise<{ privateKey: Uint8Array, createdAt: number } | null> {
   const session = await getSession(padId)
   if (!session) return null
 
   try {
-    return await decryptPrivateKey(session.encryptedPrivateKey, session.aesKey, session.iv)
+    const privateKey = await decryptPrivateKey(session.encryptedPrivateKey, session.aesKey, session.iv)
+    return { privateKey, createdAt: session.createdAt }
   } catch (error) {
     console.error('Failed to decrypt private key:', error)
     return null

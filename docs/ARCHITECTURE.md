@@ -6,6 +6,8 @@ This document describes the technical architecture of NostrPad.
 
 NostrPad is a decentralized notepad application built on the Nostr protocol. It uses client-side encryption, IndexedDB for session persistence, and communicates with Nostr relays for real-time data synchronization.
 
+> **Note**: NostrPad is designed for **temporary sharing** and collaboration, not permanent storage. Sessions and data are treated as ephemeral. Always back up important information elsewhere.
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        Browser                               │
@@ -95,7 +97,8 @@ interface SessionData {
   encryptedPrivateKey: Uint8Array  // AES-GCM encrypted
   aesKey: CryptoKey                // Non-extractable
   iv: Uint8Array                   // 96-bit IV
-  integrityTag: Uint8Array         // SHA-256 binding padId to encrypted data
+  createdAt: number                // Session creation timestamp (ms)
+  integrityTag: Uint8Array         // SHA-256 binding padId + createdAt to encrypted data
 }
 ```
 
@@ -103,14 +106,103 @@ The AES key is generated with `extractable: false`, meaning it cannot be exporte
 
 **Integrity Verification:**
 
-The `integrityTag` is computed as `SHA-256(padId + iv + encryptedPrivateKey)`. This cryptographically binds the displayed padId to the actual encrypted data, preventing tampering attacks where an attacker modifies the padId in IndexedDB to display a fake identifier.
+The `integrityTag` cryptographically binds the displayed padId and timestamp to the actual encrypted data, preventing tampering attacks.
 
-When loading a session for display, the integrity tag is verified before showing the padId to the user.
+**serializeSession Specification:**
+
+```typescript
+function serializeSession(
+  padId: string,           // 12-character Base59 string
+  createdAt: number,       // Milliseconds since Unix epoch
+  iv: Uint8Array,          // 12 bytes (96-bit AES-GCM IV)
+  encryptedPrivateKey: Uint8Array  // 48 bytes (32-byte key + 16-byte auth tag)
+): Uint8Array {
+  // padId: UTF-8 encoded bytes (12 bytes for 12 ASCII characters)
+  const padIdBytes = new TextEncoder().encode(padId)  // 12 bytes
+
+  // createdAt: 8-byte big-endian unsigned integer
+  const createdAtBytes = new Uint8Array(8)
+  const view = new DataView(createdAtBytes.buffer)
+  view.setBigUint64(0, BigInt(createdAt), false)  // false = big-endian
+
+  // Concatenate in order: padId || createdAt || iv || encryptedPrivateKey
+  // Total: 12 + 8 + 12 + 48 = 80 bytes (no delimiters)
+  const result = new Uint8Array(padIdBytes.length + 8 + iv.length + encryptedPrivateKey.length)
+  let offset = 0
+  result.set(padIdBytes, offset);        offset += padIdBytes.length
+  result.set(createdAtBytes, offset);    offset += 8
+  result.set(iv, offset);                offset += iv.length
+  result.set(encryptedPrivateKey, offset)
+
+  return result
+}
+
+// integrityTag computation
+integrityTag = SHA-256(serializeSession(padId, createdAt, iv, encryptedPrivateKey))
+```
+
+**Example:**
+
+```
+padId:              "ABC123xyz789"
+createdAt:          1704067200000 (2024-01-01T00:00:00.000Z)
+iv:                 <12 random bytes>
+encryptedPrivateKey: <48 bytes from AES-GCM>
+
+Serialized (80 bytes):
+  Bytes  0-11:  UTF-8("ABC123xyz789")           = 0x41 0x42 0x43 0x31 0x32 0x33 0x78 0x79 0x7a 0x37 0x38 0x39
+  Bytes 12-19:  BigEndian(1704067200000)        = 0x00 0x00 0x01 0x8c 0xf3 0x4c 0x98 0x00
+  Bytes 20-31:  iv (raw bytes)
+  Bytes 32-79:  encryptedPrivateKey (raw bytes)
+
+integrityTag = SHA-256(serialized) → 32 bytes
+```
+
+**Strict Schema Enforcement:**
+Sessions without a `createdAt` timestamp (legacy sessions) are considered invalid and will not be loaded. This forces a migration to the new secure session format.
 
 **Flow:**
 1. New session: Generate keypair → Encrypt secret key → Compute integrity tag → Store in IndexedDB
 2. Resume session: Load from IndexedDB → Verify integrity tag → Decrypt secret key → Derive keys
 3. Import session: Decode Base59 secret → Encrypt → Compute integrity tag → Store in IndexedDB
+
+**Temporary Storage Philosophy:**
+Since NostrPad is a tool for temporary sharing, the local session storage is not guaranteed to persist indefinitely. 
+
+**Database Schema Upgrades:**
+The application uses a destructive upgrade strategy for IndexedDB. When the database version is incremented (due to schema changes), the `onupgradeneeded` handler **deletes the existing object store** before recreating it. 
+- This ensures a clean state and prevents compatibility issues with outdated session formats.
+- Users must re-import their secret keys after an application update that changes the schema.
+- This is by design, aligning with the ephemeral nature of the tool.
+
+Users are encouraged to save their secret keys if they need to restore access later.
+
+**Relay Data Retention:**
+In addition to local session clearance, the content itself is stored on external Nostr relays which have their own retention policies.
+- Relays may **purge old events** to save space.
+- Relays may strictly limit the number of events per kind/author (NIP-77 limits).
+- If all relays housing a specific pad's content purge that event, the content is permanently lost unless a client republishes it.
+
+This reinforces the temporary nature of the application; neither the local session nor the remote content is guaranteed to persist.
+
+### Session Logout & Invalidation
+
+To support multiple devices where importing a key on a new device invalidates the old one:
+
+1. **Logout Event (Kind 21000)**: Ephemeral event published when a key is imported.
+   ```typescript
+   {
+     kind: 21000,
+     tags: [["d", padId]],
+     content: "logout",
+     created_at: <now>
+   }
+   ```
+
+2. **Detection**:
+   - Editors subscribe to Kind 21000.
+   - If `event.created_at * 1000 > session.createdAt`, the session is considered "overridden" by a newer session.
+   - Action: Local session is cleared, and the user is downgraded to view-only mode.
 
 ### Content Encryption
 
@@ -203,10 +295,10 @@ Content Change
 ```
 
 **Key behaviors:**
-- Editor mode: Publish-only, no subscription
+- Editor mode: One-time content fetch on init, then subscribe to logout events only
 - Viewer mode: Subscribe to all kind 30078 events, filter by padId match
 - Debounced publishing (500ms) to avoid relay spam
-- Session storage backup of content
+- Nostr relay is the sole source of truth for content (no local caching)
 - Ref-based state to prevent stale closures
 
 ### useRelayDiscovery Hook
@@ -228,10 +320,18 @@ Returns list of responsive relays for use by useNostrPad.
 ### Publishing (Edit Mode)
 
 ```
+Component Mount
+    │
+    ▼
+pool.querySync(relays, contentFilter)
+    │
+    └─► Fetch latest content event once
+    │
+    ▼
 User Types
     │
     ▼
-setContent() ─► sessionStorage backup
+setContent()
     │
     ▼ (500ms debounce)
     │
@@ -294,6 +394,7 @@ For each event received:
 | Constant | Value | Description |
 |----------|-------|-------------|
 | `NOSTRPAD_KIND` | 30078 | Nostr event kind |
+| `LOGOUT_KIND` | 21000 | Ephemeral logout signal |
 | `D_TAG` | "nostrpad" | Replaceable event identifier |
 | `PAD_ID_LENGTH` | 12 | Characters in pad ID |
 | `PAD_ID_BYTES` | 8 | Bytes from pubkey for pad ID |
