@@ -57,7 +57,8 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
     publicKey: keys?.publicKey || '',
     secretKey: keys?.secretKey || null,
     sessionCreatedAt: keys?.sessionCreatedAt,
-    onLogoutSignal: handleLogout
+    onLogoutSignal: handleLogout,
+    isBlocked: isMultiTabBlocked
   })
 
   // Enforce single-tab editor

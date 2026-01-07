@@ -12,6 +12,7 @@ interface UseNostrPadOptions {
   secretKey: Uint8Array | null
   sessionCreatedAt?: number
   onLogoutSignal?: () => void
+  isBlocked?: boolean
 }
 
 interface UseNostrPadReturn {
@@ -26,7 +27,7 @@ interface UseNostrPadReturn {
   isDiscovering: boolean
 }
 
-export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onLogoutSignal }: UseNostrPadOptions): UseNostrPadReturn {
+export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onLogoutSignal, isBlocked = false }: UseNostrPadOptions): UseNostrPadReturn {
   const [content, setContentState] = useState('')
   const [relayStatus, setRelayStatus] = useState<Map<string, boolean>>(new Map())
   const [isSaving, setIsSaving] = useState(false)
@@ -195,7 +196,7 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
 
   // Publish when debounced content changes
   useEffect(() => {
-    if (!canEdit || !secretKey || connectedCount === 0 || isDiscovering) return
+    if (!canEdit || !secretKey || connectedCount === 0 || isDiscovering || isBlocked) return
     if (pendingPublishRef.current) return
 
     // Don't publish if content matches latest text and we already have a known event
@@ -250,14 +251,14 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
     }
 
     doPublish()
-  }, [debouncedContent, canEdit, secretKey, connectedCount, activeRelays, isDiscovering, padId])
+  }, [debouncedContent, canEdit, secretKey, connectedCount, activeRelays, isDiscovering, padId, isBlocked])
 
   // Set content handler
   const setContent = useCallback((newContent: string) => {
-    if (!canEdit) return
+    if (!canEdit || isBlocked) return
     isLocalChangeRef.current = true
     setContentState(newContent)
-  }, [canEdit])
+  }, [canEdit, isBlocked])
 
   return {
     content,
