@@ -12,6 +12,10 @@ A simple shared notepad powered by Nostr relays. Create a pad, share the link, a
 - **CRC32 checksum** - Verify content integrity at a glance
 - **No backend required** - Pure static site, host anywhere (Vercel, Netlify, GitHub Pages, Cloudflare Pages)
 
+## Demo
+
+Try it out at [https://nostrpad.kuvi.app/](https://nostrpad.kuvi.app/)
+
 ## URL Structure
 
 ```
