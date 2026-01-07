@@ -37,6 +37,8 @@ The pad ID is a 12-character Base59 identifier derived from the first 8 bytes of
 
 ## Encryption & Privacy
 
+> **Do not store sensitive data.** NostrPad is designed for convenience, not security. Treat it as a semi-public scratchpad. Sessions never expire and anyone with access to your browser can resume your session unless it is cleared.
+
 Pad content is encrypted before publishing using NIP-44. The encryption key is deterministically
 derived from the `padId`, which means anyone with the view-only `#padId` link can decrypt and read
 the content. This design keeps URLs short and shareable, but it is **not** confidential against

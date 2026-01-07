@@ -278,12 +278,16 @@ For each event received:
 - **Content confidentiality**: Anyone with the padId can derive the decryption key
 - **Metadata**: Relay operators can see pubkeys, timestamps, event sizes
 - **Browser-level attacks**: XSS could access decrypted content in memory
+- **Session expiration**: There is no server-side session management or automatic expiration. Sessions persist indefinitely in IndexedDB until manually cleared.
+- **Physical access**: Anyone with access to the browser (same device, same browser profile) can resume an active session and gain full read/write access to the pad unless the session is cleared.
 
 ### Recommendations
 
-- Treat pad URLs as semi-public - don't put highly sensitive data
-- Clear sessions when done on shared computers
+- **Do not store sensitive data** - NostrPad is designed for convenience, not security. Treat it as a semi-public scratchpad.
+- Treat pad URLs as semi-public - sharing the URL shares read access
+- Clear sessions when done on shared or public computers
 - Back up secret keys for important pads
+- Use browser private/incognito mode on untrusted devices
 
 ## Constants
 
