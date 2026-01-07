@@ -101,12 +101,13 @@ export async function initDB(): Promise<IDBDatabase> {
 }
 
 export async function storeSession(padId: string, encryptedPrivateKey: Uint8Array, aesKey: CryptoKey, iv: Uint8Array, createdAt: number = Date.now()): Promise<void> {
+  // Compute integrity tag BEFORE starting the transaction
+  // Safari strictly follows IndexedDB spec where transactions auto-commit when event loop yields
+  const integrityTag = await computeIntegrityTag(padId, createdAt, iv, encryptedPrivateKey)
+
   const db = await initDB()
   const transaction = db.transaction([STORE_NAME], 'readwrite')
   const store = transaction.objectStore(STORE_NAME)
-
-  // Compute integrity tag to bind padId and timestamp to encrypted data
-  const integrityTag = await computeIntegrityTag(padId, createdAt, iv, encryptedPrivateKey)
 
   const data: SessionData = {
     padId,
