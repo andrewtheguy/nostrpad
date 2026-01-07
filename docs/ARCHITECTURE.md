@@ -95,7 +95,8 @@ interface SessionData {
   encryptedPrivateKey: Uint8Array  // AES-GCM encrypted
   aesKey: CryptoKey                // Non-extractable
   iv: Uint8Array                   // 96-bit IV
-  integrityTag: Uint8Array         // SHA-256 binding padId to encrypted data
+  createdAt: number                // Session creation timestamp (ms)
+  integrityTag: Uint8Array         // SHA-256 binding padId + createdAt to encrypted data
 }
 ```
 
@@ -103,14 +104,34 @@ The AES key is generated with `extractable: false`, meaning it cannot be exporte
 
 **Integrity Verification:**
 
-The `integrityTag` is computed as `SHA-256(padId + iv + encryptedPrivateKey)`. This cryptographically binds the displayed padId to the actual encrypted data, preventing tampering attacks where an attacker modifies the padId in IndexedDB to display a fake identifier.
+The `integrityTag` is computed as `SHA-256(padId + createdAt + iv + encryptedPrivateKey)`. This cryptographically binds the displayed padId and timestamp to the actual encrypted data, preventing tampering attacks.
 
-When loading a session for display, the integrity tag is verified before showing the padId to the user.
+**Strict Schema Enforcement:**
+Sessions without a `createdAt` timestamp (legacy sessions) are considered invalid and will not be loaded. This forces a migration to the new secure session format.
 
 **Flow:**
 1. New session: Generate keypair → Encrypt secret key → Compute integrity tag → Store in IndexedDB
 2. Resume session: Load from IndexedDB → Verify integrity tag → Decrypt secret key → Derive keys
 3. Import session: Decode Base59 secret → Encrypt → Compute integrity tag → Store in IndexedDB
+
+### Session Logout & Invalidation
+
+To support multiple devices where importing a key on a new device invalidates the old one:
+
+1. **Logout Event (Kind 21000)**: Ephemeral event published when a key is imported.
+   ```typescript
+   {
+     kind: 21000,
+     tags: [["d", padId]],
+     content: "logout",
+     created_at: <now>
+   }
+   ```
+
+2. **Detection**:
+   - Editors subscribe to Kind 21000.
+   - If `event.created_at * 1000 > session.createdAt`, the session is considered "overridden" by a newer session.
+   - Action: Local session is cleared, and the user is downgraded to view-only mode.
 
 ### Content Encryption
 
@@ -294,6 +315,7 @@ For each event received:
 | Constant | Value | Description |
 |----------|-------|-------------|
 | `NOSTRPAD_KIND` | 30078 | Nostr event kind |
+| `LOGOUT_KIND` | 21000 | Ephemeral logout signal |
 | `D_TAG` | "nostrpad" | Replaceable event identifier |
 | `PAD_ID_LENGTH` | 12 | Characters in pad ID |
 | `PAD_ID_BYTES` | 8 | Bytes from pubkey for pad ID |
