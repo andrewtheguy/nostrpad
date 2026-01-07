@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { deriveKeys } from '../lib/keys'
 import { useNostrPad } from '../hooks/useNostrPad'
 import { Header } from './Header'
@@ -13,6 +13,7 @@ interface PadPageProps {
 export function PadPage({ padId, isEdit }: PadPageProps) {
   const [keys, setKeys] = useState<{ secretKey: Uint8Array | null, publicKey: string } | null>(null)
   const [loading, setLoading] = useState(true)
+  const isMountedRef = useRef(true)
 
   const {
     content,
@@ -30,23 +31,33 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
   })
 
   useEffect(() => {
+    isMountedRef.current = true
     const loadKeys = async () => {
       try {
         const derivedKeys = await deriveKeys(padId, isEdit)
+        if (!isMountedRef.current) return
         setKeys(derivedKeys)
-        
+
         // If edit was requested but no key found or decryption failed, redirect to view-only URL
         if (isEdit && !derivedKeys?.secretKey) {
           window.location.hash = padId
         }
       } catch (error) {
         console.error('Failed to derive keys:', error)
-        setKeys(null)
+        if (isMountedRef.current) {
+          setKeys(null)
+        }
       } finally {
-        setLoading(false)
+        if (isMountedRef.current) {
+          setLoading(false)
+        }
       }
     }
     loadKeys()
+
+    return () => {
+      isMountedRef.current = false
+    }
   }, [padId, isEdit])
 
   if (loading) {
