@@ -74,7 +74,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
 
     // We need to find the relay list. We can use bootstrap relays for now as we don't have active relays discovered yet.
     // In a real app we might want to discover first, but bootstrap is fine for the landing page check.
-    const relays = ['wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.primal.net']
+    const relays = BOOTSTRAP_RELAYS
 
     const sub = pool.subscribe(relays, {
       kinds: [21000],
