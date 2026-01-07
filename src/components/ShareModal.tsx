@@ -101,7 +101,7 @@ export function ShareModal({ padId, onClose }: ShareModalProps) {
               </button>
             </div>
             <p className="text-xs text-gray-500">
-              Share this link to allow editing. Recipients must have edit access (via session).
+              Share this link with authorized editors who have an active session.
             </p>
           </div>
         </div>
