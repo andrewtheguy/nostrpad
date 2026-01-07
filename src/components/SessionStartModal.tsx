@@ -47,12 +47,21 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
   const [lastSessionPadId, setLastSessionPadId] = useState<string | null>(null)
   const [createError, setCreateError] = useState('')
   const [showSecretError, setShowSecretError] = useState('')
+  const [generalError, setGeneralError] = useState('')
   const [isConfirming, setIsConfirming] = useState(false)
   const [lastSessionCreatedAt, setLastSessionCreatedAt] = useState<number>(0)
 
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
+    // Check for error flags in URL
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('reason') === 'multiple_tabs') {
+      setGeneralError('Edit session opened in another tab. This tab has been closed.')
+      // Clean up URL without reload
+      window.history.replaceState({}, '', '/')
+    }
+
     getVerifiedStoredSession().then(result => {
       // Only show padId if integrity verification passes
       if (result) {
@@ -372,6 +381,11 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
         <p className="text-gray-300 mb-6">
           Choose how to start your session:
         </p>
+        {generalError && (
+          <div className="bg-red-900/50 border border-red-700 text-red-200 px-4 py-3 rounded-lg text-sm text-center mb-4">
+            {generalError}
+          </div>
+        )}
         {createError && (
           <p className="text-red-400 text-sm mb-4">{createError}</p>
         )}

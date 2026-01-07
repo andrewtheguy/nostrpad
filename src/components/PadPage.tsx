@@ -56,13 +56,8 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
     channel.onmessage = (event) => {
       if (event.data === 'NEW_EDITOR') {
         // Another tab has opened this pad in edit mode
-        // Redirect to home immediately
-        window.location.hash = ''
-
-        // Show alert after a brief delay to allow the redirect (UI update) to happen first
-        setTimeout(() => {
-          alert('Edit session opened in another tab. This tab has been closed.')
-        }, 100)
+        // Redirect to home and show inline message via query param
+        window.location.href = '/?reason=multiple_tabs'
       }
     }
 
