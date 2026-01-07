@@ -77,9 +77,13 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     // In a real app we might want to discover first, but bootstrap is fine for the landing page check.
     const relays = BOOTSTRAP_RELAYS
 
+    // Only fetch logout events around our session creation time (with 2 min padding for clock skew)
+    const since = Math.floor(lastSessionCreatedAt / 1000) - 120
+
     const sub = pool.subscribe(relays, {
       kinds: [21000],
-      '#d': [lastSessionPadId]
+      '#d': [lastSessionPadId],
+      since
     }, {
       onevent: (event) => {
         // Check if this event invalidates our session
