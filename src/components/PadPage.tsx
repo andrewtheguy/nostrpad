@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { deriveKeys } from '../lib/keys'
 import { useNostrPad } from '../hooks/useNostrPad'
+import { getVerifiedStoredSession } from '../lib/sessionStorage'
 import { Header } from './Header'
 import { Editor } from './Editor'
 import { Footer } from './Footer'
@@ -15,6 +16,7 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
   const [loading, setLoading] = useState(true)
   const [editModeFailed, setEditModeFailed] = useState(false)
   const [isRetrying, setIsRetrying] = useState(false)
+  const [hasMatchingSession, setHasMatchingSession] = useState(false)
   const isMountedRef = useRef(true)
 
   const {
@@ -67,6 +69,30 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
       isMountedRef.current = false
     }
   }, [loadKeys])
+
+  // Check for matching session when in view-only mode
+  useEffect(() => {
+    if (isEdit || loading) return
+
+    const checkForMatchingSession = async () => {
+      try {
+        const result = await getVerifiedStoredSession()
+        if (result && result.session.padId === padId) {
+          setHasMatchingSession(true)
+        } else {
+          setHasMatchingSession(false)
+        }
+      } catch {
+        setHasMatchingSession(false)
+      }
+    }
+
+    checkForMatchingSession()
+  }, [padId, isEdit, loading])
+
+  const handleSwitchToEditMode = () => {
+    window.location.hash = `${padId}:rw`
+  }
 
   const handleRetry = () => {
     setIsRetrying(true)
@@ -152,6 +178,17 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
 
   return (
     <div className="h-screen bg-gray-900 flex flex-col">
+      {hasMatchingSession && !canEdit && (
+        <div className="bg-blue-900 px-4 py-1.5 flex items-center justify-center gap-2">
+          <span className="text-blue-200 text-sm">You have an active session for this pad.</span>
+          <button
+            onClick={handleSwitchToEditMode}
+            className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded transition-colors"
+          >
+            Switch to R/W
+          </button>
+        </div>
+      )}
       <Header
         isSaving={isSaving}
         canEdit={canEdit}
