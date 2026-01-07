@@ -193,6 +193,12 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
             >
               Reload Page
             </button>
+            <button
+              onClick={handleGoHome}
+              className="w-full bg-gray-800 hover:bg-gray-700 text-gray-400 font-medium py-2 px-4 rounded transition-colors border border-gray-700"
+            >
+              Go to Home Page
+            </button>
           </div>
         </div>
       </div>
