@@ -124,10 +124,36 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     }
   }
 
-  const handleResumeLastSession = () => {
+  const [resumeError, setResumeError] = useState('')
+
+  const handleResumeLastSession = async () => {
     if (!lastSessionPadId) return
-    window.location.hash = `${lastSessionPadId}:rw`
-    onSessionStarted({ padId: lastSessionPadId, isEdit: true })
+    setResumeError('')
+
+    try {
+      // Re-validate that the session still exists in storage
+      const session = await getStoredSession()
+      if (!session || session.padId !== lastSessionPadId) {
+        // Session no longer exists or padId mismatch
+        setLastSessionPadId(null)
+        setResumeError('Session no longer exists. Please start a new session or import your secret key.')
+        return
+      }
+
+      // Validate session data is not corrupted
+      if (!session.encryptedPrivateKey || !session.aesKey || !session.iv) {
+        setLastSessionPadId(null)
+        setResumeError('Session data is corrupted. Please start a new session or import your secret key.')
+        return
+      }
+
+      window.location.hash = `${lastSessionPadId}:rw`
+      onSessionStarted({ padId: lastSessionPadId, isEdit: true })
+    } catch (error) {
+      console.error('Failed to validate session:', error)
+      setLastSessionPadId(null)
+      setResumeError('Failed to validate session. Please try again.')
+    }
   }
 
   const handleClearSession = async () => {
@@ -247,6 +273,9 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
         </p>
         {createError && (
           <p className="text-red-400 text-sm mb-4">{createError}</p>
+        )}
+        {resumeError && (
+          <p className="text-red-400 text-sm mb-4">{resumeError}</p>
         )}
         <div className="space-y-3">
           {lastSessionPadId && (
