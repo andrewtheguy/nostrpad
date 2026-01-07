@@ -47,17 +47,55 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
   const [createError, setCreateError] = useState('')
   const [showSecretError, setShowSecretError] = useState('')
   const [isConfirming, setIsConfirming] = useState(false)
+  const [lastSessionCreatedAt, setLastSessionCreatedAt] = useState<number>(0)
 
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     getVerifiedStoredSession().then(result => {
       // Only show padId if integrity verification passes
-      setLastSessionPadId(result?.session.padId || null)
+      if (result) {
+        setLastSessionPadId(result.session.padId)
+        setLastSessionCreatedAt(result.session.createdAt)
+      } else {
+        setLastSessionPadId(null)
+      }
     }).catch(error => {
       console.error('Failed to get stored session:', error)
     })
   }, [])
+
+  // Listen for logout events while on this screen
+  useEffect(() => {
+    if (!lastSessionPadId || !lastSessionCreatedAt) return
+
+    const pool = new SimplePool()
+
+    // We need to find the relay list. We can use bootstrap relays for now as we don't have active relays discovered yet.
+    // In a real app we might want to discover first, but bootstrap is fine for the landing page check.
+    const relays = ['wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.primal.net']
+
+    const sub = pool.subscribe(relays, {
+      kinds: [21000],
+      '#d': [lastSessionPadId]
+    }, {
+      onevent: (event) => {
+        // Check if this event invalidates our session
+        const eventTimeMs = event.created_at * 1000
+        if (eventTimeMs > lastSessionCreatedAt) {
+          console.log('Session invalidated by remote device')
+          setLastSessionPadId(null)
+          clearSession().catch(console.error)
+          alert('Your saved session was ended by another device.')
+        }
+      }
+    })
+
+    return () => {
+      sub.close()
+      pool.close(relays)
+    }
+  }, [lastSessionPadId, lastSessionCreatedAt])
 
   // Cleanup copy timeout on unmount
   useEffect(() => {
