@@ -1,5 +1,5 @@
 const DB_NAME = 'nostrpad-sessions'
-const DB_VERSION = 3
+const DB_VERSION = 4
 const STORE_NAME = 'sessions'
 const GLOBAL_KEY = 'current-session'
 
@@ -86,9 +86,11 @@ export async function initDB(): Promise<IDBDatabase> {
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME)
+      // Clear database on upgrade to ensure clean state
+      if (db.objectStoreNames.contains(STORE_NAME)) {
+        db.deleteObjectStore(STORE_NAME)
       }
+      db.createObjectStore(STORE_NAME)
     }
   })
 
