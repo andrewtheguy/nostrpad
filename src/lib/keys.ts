@@ -64,9 +64,9 @@ export function parseUrl(hash: string): ParsedUrl {
 
 /**
  * Derive keys from padId and edit intent, checking IndexedDB for stored session
- * Returns null if derivation fails
+ * Falls back to view-only mode if edit is requested but no valid session exists or on errors
  */
-export async function deriveKeys(padId: string, isEdit: boolean): Promise<{ secretKey: Uint8Array | null, publicKey: string } | null> {
+export async function deriveKeys(padId: string, isEdit: boolean): Promise<{ secretKey: Uint8Array | null, publicKey: string }> {
   try {
     if (isEdit) {
       // Edit mode requested: check if we have a stored session for this padId
@@ -74,7 +74,7 @@ export async function deriveKeys(padId: string, isEdit: boolean): Promise<{ secr
       if (storedSecretKey) {
         // We have the secret key from storage
         if (storedSecretKey.length !== 32) {
-          return null
+          return { secretKey: null, publicKey: '' }
         }
         const publicKey = getPublicKey(storedSecretKey)
 
@@ -84,7 +84,7 @@ export async function deriveKeys(padId: string, isEdit: boolean): Promise<{ secr
 
         if (expectedPadId !== padId) {
           console.warn('PadId mismatch - stored key may be corrupted')
-          return null
+          return { secretKey: null, publicKey: '' }
         }
 
         return { secretKey: storedSecretKey, publicKey }
@@ -98,7 +98,7 @@ export async function deriveKeys(padId: string, isEdit: boolean): Promise<{ secr
     }
   } catch (error) {
     console.error('Failed to derive keys:', error)
-    return null
+    return { secretKey: null, publicKey: '' }
   }
 }
 
