@@ -61,8 +61,33 @@ export async function storeSession(padId: string, encryptedPrivateKey: Uint8Arra
 
   return new Promise((resolve, reject) => {
     const request = store.put(data, GLOBAL_KEY)
-    request.onsuccess = () => resolve()
-    request.onerror = () => reject(request.error)
+
+    const cleanup = () => {
+      transaction.oncomplete = null
+      transaction.onerror = null
+      transaction.onabort = null
+      request.onerror = null
+    }
+
+    transaction.oncomplete = () => {
+      cleanup()
+      resolve()
+    }
+
+    transaction.onerror = () => {
+      cleanup()
+      reject(transaction.error)
+    }
+
+    transaction.onabort = () => {
+      cleanup()
+      reject(new Error('Transaction aborted'))
+    }
+
+    request.onerror = () => {
+      cleanup()
+      reject(request.error)
+    }
   })
 }
 
@@ -169,7 +194,32 @@ export async function clearSession(): Promise<void> {
 
   return new Promise((resolve, reject) => {
     const request = store.delete(GLOBAL_KEY)
-    request.onsuccess = () => resolve()
-    request.onerror = () => reject(request.error)
+
+    const cleanup = () => {
+      transaction.oncomplete = null
+      transaction.onerror = null
+      transaction.onabort = null
+      request.onerror = null
+    }
+
+    transaction.oncomplete = () => {
+      cleanup()
+      resolve()
+    }
+
+    transaction.onerror = () => {
+      cleanup()
+      reject(transaction.error)
+    }
+
+    transaction.onabort = () => {
+      cleanup()
+      reject(new Error('Transaction aborted'))
+    }
+
+    request.onerror = () => {
+      cleanup()
+      reject(request.error)
+    }
   })
 }
