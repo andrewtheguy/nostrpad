@@ -61,6 +61,8 @@ export function createPadEvent(text: string, padId: string, secretKey: Uint8Arra
  */
 export function isValidPadEvent(event: Event): boolean {
   return (
+    event.kind === NOSTRPAD_KIND &&
+    event.tags.some(t => t[0] === 'd' && t[1] === D_TAG) &&
     verifyEvent(event)
   )
 }
