@@ -77,7 +77,7 @@ npm run lint
 ## Limits
 
 - Content limited to 16,000 characters (safe for most Nostr relays)
-- Pad IDs are 12 Base59 characters (~47 bits from 8 bytes of pubkey)
+- Pad IDs are 12 Base59 characters (~70 bits from 8 bytes of pubkey)
 - Uses Nostr kind 30078 (replaceable application-specific events)
   - Only the latest version is stored on relays (no edit history)
   - Content may be deleted if relays prune old/inactive events
