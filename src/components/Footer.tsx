@@ -6,7 +6,6 @@ interface FooterProps {
   content: string
   relayStatus: Map<string, boolean>
   activeRelays: string[]
-  padId: string
   isDiscovering: boolean
 }
 
@@ -14,7 +13,6 @@ export function Footer({
   content,
   relayStatus,
   activeRelays,
-  padId,
   isDiscovering
 }: FooterProps) {
   const characterCount = content.length

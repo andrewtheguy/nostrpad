@@ -89,7 +89,6 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
         content={content}
         relayStatus={relayStatus}
         activeRelays={activeRelays}
-        padId={padId}
         isDiscovering={isDiscovering}
       />
     </div>

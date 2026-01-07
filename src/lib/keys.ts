@@ -1,5 +1,5 @@
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure'
-import { encode, decode, encodeFixed } from './encoding'
+import { encode, encodeFixed } from './encoding'
 import { PAD_ID_BYTES, PAD_ID_LENGTH } from './constants'
 import { getDecryptedPrivateKey } from './sessionStorage'
 

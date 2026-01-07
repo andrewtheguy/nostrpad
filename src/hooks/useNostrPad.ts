@@ -196,7 +196,7 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
     }
 
     doPublish()
-  }, [debouncedContent, canEdit, secretKey, connectedCount, activeRelays, isDiscovering])
+  }, [debouncedContent, canEdit, secretKey, connectedCount, activeRelays, isDiscovering, padId])
 
   // Set content handler
   const setContent = useCallback((newContent: string) => {
