@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { parseUrl } from './lib/keys'
 import { PadPage } from './components/PadPage'
 import { SessionStartModal } from './components/SessionStartModal'
@@ -6,6 +6,7 @@ import { SessionStartModal } from './components/SessionStartModal'
 function App() {
   const [route, setRoute] = useState<{ padId: string; isEdit: boolean } | null>(null)
   const [showModal, setShowModal] = useState(false)
+  const modalTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -26,7 +27,10 @@ function App() {
 
     // Listen for hash changes
     window.addEventListener('hashchange', handleHashChange)
-    return () => window.removeEventListener('hashchange', handleHashChange)
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange)
+      clearTimeout(modalTimeoutRef.current!)
+    }
   }, [])
 
   const handleSessionStarted = (padRoute: { padId: string; isEdit: boolean } | null) => {
@@ -35,7 +39,8 @@ function App() {
       setRoute(padRoute)
     } else {
       // Fallback: if no pad info provided, show modal again after 2s
-      setTimeout(() => {
+      clearTimeout(modalTimeoutRef.current!)
+      modalTimeoutRef.current = setTimeout(() => {
         setShowModal(true)
       }, 2000)
     }
