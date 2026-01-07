@@ -4,7 +4,7 @@ import type { Event } from 'nostr-tools/core'
 import { useDebounce } from './useDebounce'
 import { useRelayDiscovery } from './useRelayDiscovery'
 import { createPadEvent, createPadIdSearchFilter, publishEvent, isValidPadEvent, getPadIdFromPubkey, decodePayload, isValidLogoutEvent } from '../lib/nostr'
-import { DEBOUNCE_MS, LOGOUT_KIND } from '../lib/constants'
+import { DEBOUNCE_MS, LOGOUT_KIND, NOSTRPAD_KIND, D_TAG } from '../lib/constants'
 
 interface UseNostrPadOptions {
   padId: string
@@ -112,18 +112,46 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
   // Initialize pool for editor mode (publish AND listen for logout)
   useEffect(() => {
     if (isDiscovering || activeRelays.length === 0) return
-    if (!canEdit) return
+    if (!canEdit || !publicKey) return
 
     const pool = new SimplePool()
     poolRef.current = pool
 
-    // Subscribe to logout events (Kind 21000)
-    const filter = {
+    // Fetch latest content once (don't subscribe to avoid unexpected updates while editing)
+    const contentFilter = {
+      kinds: [NOSTRPAD_KIND],
+      authors: [publicKey],
+      '#d': [D_TAG],
+      limit: 1
+    }
+
+    pool.querySync(activeRelays, contentFilter).then(events => {
+      if (events.length > 0) {
+        // Find the most recent valid event
+        const sorted = events
+          .filter(isValidPadEvent)
+          .sort((a, b) => b.created_at - a.created_at)
+
+        if (sorted.length > 0) {
+          const latestEvent = sorted[0]
+          const payload = decodePayload(latestEvent.content, padId)
+          if (payload && payload.timestamp > latestTimestampRef.current) {
+            latestEventRef.current = latestEvent
+            latestTimestampRef.current = payload.timestamp
+            latestTextRef.current = payload.text
+            setContentState(payload.text)
+          }
+        }
+      }
+    })
+
+    // Subscribe to logout events only (Kind 21000)
+    const logoutFilter = {
       kinds: [LOGOUT_KIND],
       '#d': [padId]
     }
 
-    const sub = pool.subscribe(activeRelays, filter, {
+    const sub = pool.subscribe(activeRelays, logoutFilter, {
       onevent: handleEvent,
       oneose: () => {
         setRelayStatus(new Map(pool.listConnectionStatus()))
@@ -141,7 +169,7 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
       sub.close()
       pool.close(activeRelays)
     }
-  }, [canEdit, activeRelays, isDiscovering, padId, handleEvent])
+  }, [canEdit, activeRelays, isDiscovering, padId, publicKey, handleEvent])
 
   // Initialize pool and subscribe for view-only mode
   useEffect(() => {
