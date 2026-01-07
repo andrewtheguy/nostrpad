@@ -9,9 +9,10 @@ interface HeaderProps {
   lastSaved: Date | null
   padId: string
   content: string
+  isLoadingContent?: boolean
 }
 
-export function Header({ isSaving, canEdit, lastSaved, padId, content }: HeaderProps) {
+export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoadingContent }: HeaderProps) {
   const [showShareModal, setShowShareModal] = useState(false)
   const [showInfoModal, setShowInfoModal] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -85,10 +86,13 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content }: HeaderP
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">
-          {isSaving && (
+          {isLoadingContent && (
+            <span className="text-xs text-yellow-400">Loading...</span>
+          )}
+          {!isLoadingContent && isSaving && (
             <span className="text-xs text-blue-400">Saving...</span>
           )}
-          {!isSaving && lastSaved && (
+          {!isLoadingContent && !isSaving && lastSaved && (
             <span className="text-xs text-gray-500 hidden sm:inline">
               Saved {formatLastSaved(lastSaved)}
             </span>

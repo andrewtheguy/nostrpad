@@ -26,10 +26,10 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
     // In that case, we should NOT clear it.
     try {
       const stored = await getVerifiedStoredSession()
-      const storedCreatedAt = stored?.session.createdAt || 0
-      const currentCreatedAt = keys?.sessionCreatedAt || 0
+      const storedCreatedAt = stored?.session.createdAt
+      const currentCreatedAt = keys?.sessionCreatedAt
 
-      if (storedCreatedAt > currentCreatedAt) {
+      if (storedCreatedAt && currentCreatedAt && storedCreatedAt > currentCreatedAt) {
         console.log('Skipping logout/clear: Stored session is newer (Same device update)')
         return
       }
@@ -41,7 +41,7 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
     await clearSession()
     window.location.hash = padId
     window.location.reload()
-  }, [padId, keys])
+  }, [padId, keys?.sessionCreatedAt])
 
   const {
     content,
@@ -51,7 +51,8 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
     isSaving,
     canEdit,
     lastSaved,
-    isDiscovering
+    isDiscovering,
+    isLoadingContent
   } = useNostrPad({
     padId,
     publicKey: keys?.publicKey || '',
@@ -193,6 +194,12 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
             >
               Reload Page
             </button>
+            <button
+              onClick={handleGoHome}
+              className="w-full bg-gray-800 hover:bg-gray-700 text-gray-400 font-medium py-2 px-4 rounded transition-colors border border-gray-700"
+            >
+              Go to Home Page
+            </button>
           </div>
         </div>
       </div>
@@ -273,11 +280,12 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
         lastSaved={lastSaved}
         padId={padId}
         content={content}
+        isLoadingContent={isLoadingContent}
       />
       <Editor
         content={content}
         onChange={setContent}
-        readOnly={!canEdit}
+        readOnly={!canEdit || isLoadingContent}
       />
       <Footer
         content={content}

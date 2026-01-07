@@ -4,7 +4,7 @@ import type { Event } from 'nostr-tools/core'
 import { useDebounce } from './useDebounce'
 import { useRelayDiscovery } from './useRelayDiscovery'
 import { createPadEvent, createPadIdSearchFilter, publishEvent, isValidPadEvent, getPadIdFromPubkey, decodePayload, isValidLogoutEvent } from '../lib/nostr'
-import { DEBOUNCE_MS, LOGOUT_KIND } from '../lib/constants'
+import { DEBOUNCE_MS, LOGOUT_KIND, NOSTRPAD_KIND, D_TAG } from '../lib/constants'
 
 interface UseNostrPadOptions {
   padId: string
@@ -25,6 +25,7 @@ interface UseNostrPadReturn {
   lastSaved: Date | null
   foundPublicKey: string | null
   isDiscovering: boolean
+  isLoadingContent: boolean
 }
 
 export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onLogoutSignal, isBlocked = false }: UseNostrPadOptions): UseNostrPadReturn {
@@ -33,6 +34,7 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
   const [isSaving, setIsSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [foundPublicKey, setFoundPublicKey] = useState<string | null>(publicKey || null)
+  const [isLoadingContent, setIsLoadingContent] = useState(secretKey !== null)
 
   const poolRef = useRef<SimplePool | null>(null)
   const latestEventRef = useRef<Event | null>(null)
@@ -43,7 +45,6 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
   const currentPadIdRef = useRef(padId)
 
   const canEdit = secretKey !== null
-  const storageKey = `nostrpad:${padId}`
 
   // Use relay discovery
   const {
@@ -54,7 +55,7 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
   // Handle incoming events
   const handleEvent = useCallback((event: Event) => {
     // Check for logout signal
-    if (canEdit && isValidLogoutEvent(event) && onLogoutSignal && sessionCreatedAt) {
+    if (canEdit && isValidLogoutEvent(event, padId) && onLogoutSignal && sessionCreatedAt) {
       // Logic: If we see a logout event that was created AFTER our session started,
       // it means a newer session was created elsewhere. We should logout.
       // event.created_at is in seconds.
@@ -103,44 +104,60 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
     setFoundPublicKey(publicKey || null)
     setLastSaved(null)
     setIsSaving(false)
+    setIsLoadingContent(canEdit) // true if edit mode (need to fetch), false otherwise
     latestEventRef.current = null
     latestTimestampRef.current = 0
     latestTextRef.current = ''
     isLocalChangeRef.current = false
     pendingPublishRef.current = false
-  }, [padId, publicKey])
-
-  // Load content from session storage on init (editor mode only)
-  useEffect(() => {
-    if (!canEdit) return
-    const saved = sessionStorage.getItem(storageKey)
-    if (saved) {
-      setContentState(saved)
-      latestTextRef.current = saved
-    }
-  }, [canEdit, storageKey])
-
-  // Save to session storage on content change (editor mode only)
-  useEffect(() => {
-    if (!canEdit) return
-    sessionStorage.setItem(storageKey, content)
-  }, [canEdit, content, storageKey])
+  }, [padId, publicKey, canEdit])
 
   // Initialize pool for editor mode (publish AND listen for logout)
   useEffect(() => {
     if (isDiscovering || activeRelays.length === 0) return
-    if (!canEdit) return
+    if (!canEdit || !publicKey) return
 
     const pool = new SimplePool()
     poolRef.current = pool
 
-    // Subscribe to logout events (Kind 21000)
-    const filter = {
+    // Fetch latest content once (don't subscribe to avoid unexpected updates while editing)
+    setIsLoadingContent(true)
+    const contentFilter = {
+      kinds: [NOSTRPAD_KIND],
+      authors: [publicKey],
+      '#d': [D_TAG],
+      limit: 1
+    }
+
+    pool.querySync(activeRelays, contentFilter).then(events => {
+      if (events.length > 0) {
+        // Find the most recent valid event
+        const sorted = events
+          .filter(isValidPadEvent)
+          .sort((a, b) => b.created_at - a.created_at)
+
+        if (sorted.length > 0) {
+          const latestEvent = sorted[0]
+          const payload = decodePayload(latestEvent.content, padId)
+          if (payload && payload.timestamp > latestTimestampRef.current) {
+            latestEventRef.current = latestEvent
+            latestTimestampRef.current = payload.timestamp
+            latestTextRef.current = payload.text
+            setContentState(payload.text)
+          }
+        }
+      }
+    }).finally(() => {
+      setIsLoadingContent(false)
+    })
+
+    // Subscribe to logout events only (Kind 21000)
+    const logoutFilter = {
       kinds: [LOGOUT_KIND],
       '#d': [padId]
     }
 
-    const sub = pool.subscribe(activeRelays, filter, {
+    const sub = pool.subscribe(activeRelays, logoutFilter, {
       onevent: handleEvent,
       oneose: () => {
         setRelayStatus(new Map(pool.listConnectionStatus()))
@@ -158,7 +175,7 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
       sub.close()
       pool.close(activeRelays)
     }
-  }, [canEdit, activeRelays, isDiscovering, padId, handleEvent])
+  }, [canEdit, activeRelays, isDiscovering, padId, publicKey, handleEvent])
 
   // Initialize pool and subscribe for view-only mode
   useEffect(() => {
@@ -255,10 +272,10 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
 
   // Set content handler
   const setContent = useCallback((newContent: string) => {
-    if (!canEdit || isBlocked) return
+    if (!canEdit || isBlocked || isLoadingContent) return
     isLocalChangeRef.current = true
     setContentState(newContent)
-  }, [canEdit, isBlocked])
+  }, [canEdit, isBlocked, isLoadingContent])
 
   return {
     content,
@@ -269,6 +286,7 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
     canEdit,
     lastSaved,
     foundPublicKey,
-    isDiscovering
+    isDiscovering,
+    isLoadingContent
   }
 }
