@@ -4,45 +4,55 @@ A simple shared notepad powered by Nostr relays. Create a pad, share the link, a
 
 ## Features
 
-- **Unique URLs** - Each pad gets a unique URL with unambiguous characters
-- **Real-time sync** - Content syncs across clients via Nostr relays
-- **Creator-only editing** - Only the creator (with the secret in URL) can edit
-- **Read-only sharing** - Share view-only links without the secret
+- **Session Management** - Secure session storage with AES-GCM encryption in IndexedDB
+- **Real-time Sync** - Content syncs across clients via Nostr relays with debounced publishing
+- **Editor/Viewer Modes** - Full editing for session owners, read-only view for shared links
+- **Encrypted Content** - NIP-44 encryption using a key derived from the pad ID
 - **Decentralized** - No central server, data stored on Nostr relays
-- **CRC32 checksum** - Verify content integrity at a glance
-- **No backend required** - Pure static site, host anywhere (Vercel, Netlify, GitHub Pages, Cloudflare Pages)
+- **CRC32 Checksum** - Verify content integrity at a glance
+- **Relay Discovery** - Automatic relay health checking and connection management
+- **No Backend Required** - Pure static site, host anywhere
 
 ## Demo
 
 Try it out at [https://nostrpad.kuvi.app/](https://nostrpad.kuvi.app/)
 
+## How It Works
+
+1. Visit the app to start a new session or resume an existing one
+2. A new session generates a keypair - save your secret key for backup
+3. Type your content - it syncs to Nostr relays after 500ms debounce
+4. Click "Share" to get the read-only URL for viewers
+5. Use "Import" to restore a session from your backed-up secret key
+
 ## URL Structure
 
 ```
-/#79ggjXVPkQ2z:xK9mNpQr...   → Editor view (pad ID + secret, don't share)
-/#79ggjXVPkQ2z               → Read-only view (pad ID only, shared with others)
+/#padId        -> View-only mode (shared with others)
+/#padId:rw     -> Edit mode (requires active session)
+/              -> Session start modal
 ```
 
-## How It Works
-
-1. Visit the app to create a new pad (auto-redirects to editor URL)
-2. Type your content - it syncs to Nostr relays after 500ms debounce
-3. Click "Share" to get the read-only URL for viewers
-4. Keep the editor URL private - anyone with it can edit
-5. Content is encrypted with NIP-44 using a key derived from the pad ID
+The pad ID is a 12-character Base59 identifier derived from the first 8 bytes of the public key.
 
 ## Encryption & Privacy
+
+> **Do not store sensitive data.** NostrPad is designed for convenience, not security. Treat it as a semi-public scratchpad. Sessions never expire and anyone with access to your browser can resume your session unless it is cleared.
 
 Pad content is encrypted before publishing using NIP-44. The encryption key is deterministically
 derived from the `padId`, which means anyone with the view-only `#padId` link can decrypt and read
 the content. This design keeps URLs short and shareable, but it is **not** confidential against
-anyone who can guess or obtain the pad ID. Treat pad IDs as semi-public identifiers, not secrets.
+anyone who can guess or obtain the pad ID.
+
+Session secret keys are stored encrypted in IndexedDB using AES-GCM with non-extractable keys,
+providing protection against casual access while the browser is open.
 
 ## Tech Stack
 
 - React 19 + TypeScript + Vite
 - [nostr-tools](https://github.com/nbd-wtf/nostr-tools) for Nostr protocol
 - Tailwind CSS for styling
+- Web Crypto API for session encryption
 
 ## Default Relays
 
@@ -61,15 +71,22 @@ npm run dev
 
 # Build for production
 npm run build
+
+# Lint
+npm run lint
 ```
 
 ## Limits
 
 - Content limited to 16,000 characters (safe for most Nostr relays)
-- Pad IDs are 12 Base58 URL-safe characters (~70 bits of entropy) for low-collision sharing
+- Pad IDs are 12 Base59 characters (~70 bits from 8 bytes of pubkey)
 - Uses Nostr kind 30078 (replaceable application-specific events)
   - Only the latest version is stored on relays (no edit history)
   - Content may be deleted if relays prune old/inactive events
+
+## Documentation
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed technical documentation.
 
 ## License
 

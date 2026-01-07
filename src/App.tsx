@@ -1,22 +1,24 @@
 import { useState, useEffect } from 'react'
-import { parseUrl, createNewPad } from './lib/keys'
+import { parseUrl } from './lib/keys'
 import { PadPage } from './components/PadPage'
+import { SessionStartModal } from './components/SessionStartModal'
 
 function App() {
-  const [route, setRoute] = useState<{ padId: string; secret: string | null } | null>(null)
+  const [route, setRoute] = useState<{ padId: string; isEdit: boolean } | null>(null)
+  const [showModal, setShowModal] = useState(false)
 
   useEffect(() => {
     const handleHashChange = () => {
-      const { padId, secret } = parseUrl(window.location.hash)
+      const { padId, isEdit } = parseUrl(window.location.hash)
 
       if (!padId) {
-        // No padId - create a new pad
-        const newPad = createNewPad()
-        window.location.hash = `${newPad.padId}:${newPad.secret}`
+        setShowModal(true)
+        setRoute(null)
         return
       }
 
-      setRoute({ padId, secret })
+      setRoute({ padId, isEdit })
+      setShowModal(false)
     }
 
     // Initial check
@@ -24,18 +26,30 @@ function App() {
 
     // Listen for hash changes
     window.addEventListener('hashchange', handleHashChange)
-    return () => window.removeEventListener('hashchange', handleHashChange)
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange)
+    }
   }, [])
+
+  // SessionStartModal updates window.location.hash before calling this callback,
+  // so the hashchange event will update route state. We just close the modal here.
+  const handleSessionStarted = () => {
+    setShowModal(false)
+  }
+
+  if (showModal) {
+    return <SessionStartModal onSessionStarted={handleSessionStarted} />
+  }
 
   if (!route) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white">Creating new pad...</div>
+        <div className="text-white">Loading...</div>
       </div>
     )
   }
 
-  return <PadPage padId={route.padId} secret={route.secret} />
+  return <PadPage padId={route.padId} isEdit={route.isEdit} />
 }
 
 export default App

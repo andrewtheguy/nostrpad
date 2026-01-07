@@ -1,6 +1,7 @@
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure'
-import { encode, decode, encodeFixed } from './encoding'
+import { encode, encodeFixed } from './encoding'
 import { PAD_ID_BYTES, PAD_ID_LENGTH } from './constants'
+import { getDecryptedPrivateKey } from './sessionStorage'
 
 export interface PadKeys {
   padId: string
@@ -11,11 +12,13 @@ export interface PadKeys {
 
 export interface ParsedUrl {
   padId: string | null
-  secret: string | null
+  isEdit: boolean
 }
 
 /**
- * Create a new pad with fresh keypair
+ * Create a new pad with fresh keypair.
+ * Note: This only generates keys - caller must persist via createAndStoreSession()
+ * from sessionStorage.ts before the secretKey can be retrieved by deriveKeys().
  */
 export function createNewPad(): PadKeys {
   const secretKey = generateSecretKey()
@@ -32,76 +35,90 @@ export function createNewPad(): PadKeys {
 }
 
 /**
- * Parse hash URL into padId and optional secret
- * Formats: #padId or #padId:secret
+ * Parse hash URL into padId and edit flag
+ * Formats: #padId or #padId:rw
  */
 export function parseUrl(hash: string): ParsedUrl {
   // Remove leading # if present
   const cleanHash = hash.startsWith('#') ? hash.slice(1) : hash
 
   if (!cleanHash) {
-    return { padId: null, secret: null }
+    return { padId: null, isEdit: false }
   }
 
   const colonIndex = cleanHash.indexOf(':')
 
   if (colonIndex === -1) {
     // View-only URL: just padId
-    return { padId: cleanHash, secret: null }
+    return { padId: cleanHash, isEdit: false }
   }
 
-  // Editor URL: padId:secret
+  // Check suffix after colon
+  const suffix = cleanHash.slice(colonIndex + 1)
   const padId = cleanHash.slice(0, colonIndex)
-  const secret = cleanHash.slice(colonIndex + 1)
 
-  return { padId, secret }
+  if (suffix === 'rw') {
+    return { padId, isEdit: true }
+  }
+
+  if (suffix === '') {
+    // Trailing colon with no suffix: treat as view-only
+    return { padId, isEdit: false }
+  }
+
+  // Invalid suffix format
+  console.warn(`Invalid URL suffix ':${suffix}' - expected ':rw' or no suffix`)
+  return { padId: null, isEdit: false }
 }
 
 /**
- * Derive keys from URL parts
- * Returns null if derivation fails
+ * Derive keys from padId and edit intent, checking IndexedDB for stored session
+ * Falls back to view-only mode if edit is requested but no valid session exists or on errors
  */
-export function deriveKeys(padId: string, secret: string | null): { secretKey: Uint8Array | null, publicKey: string } | null {
+export async function deriveKeys(padId: string, isEdit: boolean): Promise<{ secretKey: Uint8Array | null, publicKey: string }> {
   try {
-    if (secret) {
-      // We have the secret key, derive everything from it
-      const secretKey = decode(secret)
-      if (secretKey.length !== 32) {
-        return null
+    if (isEdit) {
+      // Edit mode requested: check if we have a stored session for this padId
+      const storedSecretKey = await getDecryptedPrivateKey(padId)
+      if (storedSecretKey) {
+        // We have the secret key from storage
+        if (storedSecretKey.length !== 32) {
+          return { secretKey: null, publicKey: '' }
+        }
+        const publicKey = getPublicKey(storedSecretKey)
+
+        // Verify padId matches (first PAD_ID_BYTES bytes of pubkey)
+        const pubkeyBytes = hexToBytes(publicKey)
+        const expectedPadId = encodeFixed(pubkeyBytes.slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
+
+        if (expectedPadId !== padId) {
+          console.warn('PadId mismatch - stored key may be corrupted')
+          return { secretKey: null, publicKey: '' }
+        }
+
+        return { secretKey: storedSecretKey, publicKey }
+      } else {
+        // Edit requested but no stored session: view-only
+        return { secretKey: null, publicKey: '' }
       }
-      const publicKey = getPublicKey(secretKey)
-
-      // Verify padId matches (first PAD_ID_BYTES bytes of pubkey)
-      const pubkeyBytes = hexToBytes(publicKey)
-      const expectedPadId = encodeFixed(pubkeyBytes.slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
-
-      if (expectedPadId !== padId) {
-        console.warn('PadId mismatch - URL may be tampered')
-        // Still allow it to work, as padId is just for display
-      }
-
-      return { secretKey, publicKey }
     } else {
-      // View-only mode: we only have padId (partial pubkey)
-      // We can't derive the full pubkey from partial, so we need to
-      // store the full pubkey somewhere or query relays
-      // For now, we'll query relays to find events matching this padId
+      // View-only mode: no need to check storage
       return { secretKey: null, publicKey: '' }
     }
   } catch (error) {
     console.error('Failed to derive keys:', error)
-    return null
+    return { secretKey: null, publicKey: '' }
   }
 }
 
 /**
  * Generate URLs for sharing
  */
-export function generateShareUrls(padId: string, secret: string): { viewerUrl: string, editorUrl: string } {
+export function generateShareUrls(padId: string): { viewerUrl: string, editorUrl: string } {
   const base = window.location.origin + window.location.pathname
   return {
     viewerUrl: `${base}#${padId}`,
-    editorUrl: `${base}#${padId}:${secret}`
+    editorUrl: `${base}#${padId}:rw`
   }
 }
 

@@ -1,9 +1,9 @@
 import { ALPHABET } from './constants'
 
-const BASE = BigInt(ALPHABET.length) // 56
+const BASE = BigInt(ALPHABET.length) // 59
 
 /**
- * Encode bytes to unambiguous Base56 string
+ * Encode bytes to unambiguous Base59 string
  */
 export function encode(bytes: Uint8Array): string {
   if (bytes.length === 0) return ''
@@ -14,7 +14,7 @@ export function encode(bytes: Uint8Array): string {
     num = num * BigInt(256) + BigInt(byte)
   }
 
-  // Convert to base56
+  // Convert to base59
   let result = ''
   while (num > 0) {
     const remainder = Number(num % BASE)
@@ -35,17 +35,17 @@ export function encode(bytes: Uint8Array): string {
 }
 
 /**
- * Decode Base56 string back to bytes
+ * Decode Base59 string back to bytes
  */
 export function decode(str: string): Uint8Array {
   if (str.length === 0) return new Uint8Array(0)
 
-  // Convert from base56 to big integer
+  // Convert from base59 to big integer
   let num = BigInt(0)
   for (const char of str) {
     const index = ALPHABET.indexOf(char)
     if (index === -1) {
-      throw new Error(`Invalid character in Base56 string: ${char}`)
+      throw new Error(`Invalid character in Base59 string: ${char}`)
     }
     num = num * BASE + BigInt(index)
   }
@@ -70,7 +70,7 @@ export function decode(str: string): Uint8Array {
 }
 
 /**
- * Encode bytes to a fixed-length Base56 string
+ * Encode bytes to a fixed-length Base59 string
  * Pads with leading characters if needed
  */
 export function encodeFixed(bytes: Uint8Array, length: number): string {

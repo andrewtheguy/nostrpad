@@ -1,18 +1,17 @@
 import { useState } from 'react'
 import { ShareModal } from './ShareModal'
 import { InfoModal } from './InfoModal'
-import { createNewPad } from '../lib/keys'
+import { clearSession } from '../lib/sessionStorage'
 
 interface HeaderProps {
   isSaving: boolean
   canEdit: boolean
   lastSaved: Date | null
   padId: string
-  secret: string | null
   content: string
 }
 
-export function Header({ isSaving, canEdit, lastSaved, padId, secret, content }: HeaderProps) {
+export function Header({ isSaving, canEdit, lastSaved, padId, content }: HeaderProps) {
   const [showShareModal, setShowShareModal] = useState(false)
   const [showInfoModal, setShowInfoModal] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -22,10 +21,8 @@ export function Header({ isSaving, canEdit, lastSaved, padId, secret, content }:
     return date.toLocaleTimeString()
   }
 
-  const handleNewPad = () => {
-    const { padId: newPadId, secret: newSecret } = createNewPad()
-    window.location.hash = `${newPadId}:${newSecret}`
-    window.location.reload()
+  const handleHome = () => {
+    window.location.href = '/'
   }
 
   const handleCopy = async () => {
@@ -48,6 +45,18 @@ export function Header({ isSaving, canEdit, lastSaved, padId, secret, content }:
     URL.revokeObjectURL(url)
   }
 
+  const handleClearSession = async () => {
+    if (confirm('Are you sure you want to clear the session? You will lose access to edit this pad.')) {
+      try {
+        await clearSession()
+        window.location.href = '/'
+      } catch (error) {
+        console.error('Failed to clear session:', error)
+        alert('Failed to clear session. Please try again.')
+      }
+    }
+  }
+
   return (
     <>
       <header className="flex items-center justify-between px-2 sm:px-4 py-2 bg-gray-800 border-b border-gray-700">
@@ -66,11 +75,12 @@ export function Header({ isSaving, canEdit, lastSaved, padId, secret, content }:
             <span className="px-2 py-0.5 text-xs font-medium bg-yellow-600 text-yellow-100 rounded">View Only</span>
           )}
           <button
-            onClick={handleNewPad}
+            onClick={handleHome}
             className="px-1.5 sm:px-2 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors"
+            title="Home"
           >
-            <span className="sm:hidden">+</span>
-            <span className="hidden sm:inline">+ New</span>
+            <span className="sm:hidden">🏠</span>
+            <span className="hidden sm:inline">Home</span>
           </button>
         </div>
 
@@ -86,14 +96,26 @@ export function Header({ isSaving, canEdit, lastSaved, padId, secret, content }:
           <button
             onClick={handleCopy}
             className="px-2 py-1 text-xs sm:text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
+            title={copied ? 'Copied!' : 'Copy content'}
           >
-            {copied ? '✓Copied' : 'Copy'}
+            <span className="sm:hidden">{copied ? '✓' : '📋'}</span>
+            <span className="hidden sm:inline">{copied ? '✓Copied' : 'Copy'}</span>
           </button>
           <button
             onClick={handleDownload}
             className="px-2 py-1 text-xs sm:text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
+            title="Download content"
           >
-            Download
+            <span className="sm:hidden">⬇️</span>
+            <span className="hidden sm:inline">Download</span>
+          </button>
+          <button
+            onClick={handleClearSession}
+            className="px-2 py-1 text-xs sm:text-sm bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+            title="Clear session"
+          >
+            <span className="sm:hidden">🗑️</span>
+            <span className="hidden sm:inline">Clear Session</span>
           </button>
           <button
             onClick={() => setShowShareModal(true)}
@@ -107,7 +129,6 @@ export function Header({ isSaving, canEdit, lastSaved, padId, secret, content }:
       {showShareModal && (
         <ShareModal
           padId={padId}
-          secret={secret}
           onClose={() => setShowShareModal(false)}
         />
       )}
