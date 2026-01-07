@@ -75,6 +75,16 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
     }
   }, [padId, publicKey])
 
+  // Reset state and refs when padId changes
+  useEffect(() => {
+    setContentState('')
+    latestEventRef.current = null
+    latestTimestampRef.current = 0
+    latestTextRef.current = ''
+    isLocalChangeRef.current = false
+    pendingPublishRef.current = false
+  }, [padId])
+
   // Load content from session storage on init (editor mode only)
   useEffect(() => {
     if (!canEdit) return

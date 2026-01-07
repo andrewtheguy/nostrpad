@@ -7,9 +7,22 @@ import { PAD_ID_BYTES, PAD_ID_LENGTH } from '../lib/constants'
 
 // Helper function
 function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2)
+  // Strip optional 0x prefix
+  const cleanHex = hex.startsWith('0x') || hex.startsWith('0X') ? hex.slice(2) : hex
+
+  // Validate even length
+  if (cleanHex.length % 2 !== 0) {
+    throw new Error('Invalid hex string: odd length')
+  }
+
+  // Validate hex characters
+  if (!/^[0-9a-fA-F]*$/.test(cleanHex)) {
+    throw new Error('Invalid hex string: contains non-hex characters')
+  }
+
+  const bytes = new Uint8Array(cleanHex.length / 2)
   for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16)
+    bytes[i] = parseInt(cleanHex.slice(i * 2, i * 2 + 2), 16)
   }
   return bytes
 }
@@ -29,6 +42,9 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState(false)
   const [lastSessionPadId, setLastSessionPadId] = useState<string | null>(null)
+  const [createError, setCreateError] = useState('')
+  const [showSecretError, setShowSecretError] = useState('')
+  const [isConfirming, setIsConfirming] = useState(false)
 
   useEffect(() => {
     getStoredSession().then(session => {
@@ -43,12 +59,14 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
       return
     }
     setIsCreating(true)
+    setCreateError('')
     try {
       const newPad = createNewPad()
       setNewPadData({ padId: newPad.padId, secret: newPad.secret })
       setMode('show-secret')
     } catch (error) {
       console.error('Failed to create session:', error)
+      setCreateError('Failed to create session. Please try again.')
     } finally {
       setIsCreating(false)
     }
@@ -57,13 +75,26 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
   const handleConfirmNewSession = async () => {
     if (!confirm('Are you sure you have copied the secret key? This is your only chance to save it for backup.')) return
     if (!newPadData) return
+    setIsConfirming(true)
+    setShowSecretError('')
     try {
       await createAndStoreSession(newPadData.padId, decode(newPadData.secret))
       window.location.hash = `${newPadData.padId}:rw`
       onSessionStarted({ padId: newPadData.padId, isEdit: true })
     } catch (error) {
       console.error('Failed to store session:', error)
+      setShowSecretError('Failed to save session. Please try again.')
+    } finally {
+      setIsConfirming(false)
     }
+  }
+
+  const handleDismissShowSecret = () => {
+    setNewPadData(null)
+    setShowSecretError('')
+    setCopied(false)
+    setCopyError(false)
+    setMode('choice')
   }
 
   const handleImportSession = async () => {
@@ -112,14 +143,19 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
 
   const copySecret = async () => {
     if (!newPadData) return
+    // Reset states before attempting
+    setCopied(false)
+    setCopyError(false)
     try {
       await navigator.clipboard.writeText(newPadData.secret)
       setCopied(true)
-      setCopyError(false)
+      // Auto-reset success message after 3 seconds
+      setTimeout(() => setCopied(false), 3000)
     } catch (error) {
       console.error('Failed to copy:', error)
       setCopyError(true)
-      setCopied(false)
+      // Auto-reset error message after 5 seconds
+      setTimeout(() => setCopyError(false), 5000)
     }
   }
 
@@ -143,12 +179,21 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
           </div>
           {copied && <p className="text-green-400 text-sm mb-4">Copied to clipboard!</p>}
           {copyError && <p className="text-red-400 text-sm mb-4">Failed to copy to clipboard</p>}
+          {showSecretError && <p className="text-red-400 text-sm mb-4">{showSecretError}</p>}
           <div className="flex gap-3">
             <button
-              onClick={handleConfirmNewSession}
-              className="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded transition-colors"
+              onClick={handleDismissShowSecret}
+              disabled={isConfirming}
+              className="flex-1 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-500 text-white font-medium py-2 px-4 rounded transition-colors"
             >
-              Continue
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmNewSession}
+              disabled={isConfirming}
+              className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-medium py-2 px-4 rounded transition-colors"
+            >
+              {isConfirming ? 'Saving...' : showSecretError ? 'Retry' : 'Continue'}
             </button>
           </div>
         </div>
@@ -200,6 +245,9 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
         <p className="text-gray-300 mb-6">
           Choose how to start your session:
         </p>
+        {createError && (
+          <p className="text-red-400 text-sm mb-4">{createError}</p>
+        )}
         <div className="space-y-3">
           {lastSessionPadId && (
             <button

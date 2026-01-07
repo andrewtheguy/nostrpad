@@ -27,25 +27,18 @@ export function ShareModal({ padId, onClose }: ShareModalProps) {
     }
   }, [viewerUrl])
 
-  const copyViewerUrl = async () => {
+  const copyToClipboard = async (text: string, setCopied: (value: boolean) => void) => {
     try {
-      await navigator.clipboard.writeText(viewerUrl)
-      setCopiedViewer(true)
-      setTimeout(() => setCopiedViewer(false), 2000)
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
     } catch (error) {
       console.error('Failed to copy:', error)
     }
   }
 
-  const copyEditorUrl = async () => {
-    try {
-      await navigator.clipboard.writeText(editorUrl)
-      setCopiedEditor(true)
-      setTimeout(() => setCopiedEditor(false), 2000)
-    } catch (error) {
-      console.error('Failed to copy:', error)
-    }
-  }
+  const copyViewerUrl = () => copyToClipboard(viewerUrl, setCopiedViewer)
+  const copyEditorUrl = () => copyToClipboard(editorUrl, setCopiedEditor)
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
