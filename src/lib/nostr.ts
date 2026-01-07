@@ -84,11 +84,17 @@ export function createLogoutEvent(padId: string, secretKey: Uint8Array): Event {
 
 /**
  * Verify a logout event
+ * @param event The event to verify
+ * @param padId Optional padId to validate the 'd' tag value against
  */
-export function isValidLogoutEvent(event: Event): boolean {
+export function isValidLogoutEvent(event: Event, padId?: string): boolean {
+  const hasValidDTag = padId
+    ? event.tags.some(t => t[0] === 'd' && t[1] === padId)
+    : event.tags.some(t => t[0] === 'd' && t[1])
+
   return (
     event.kind === 21000 &&
-    event.tags.some(t => t[0] === 'd') &&
+    hasValidDTag &&
     verifyEvent(event)
   )
 }

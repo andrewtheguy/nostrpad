@@ -55,7 +55,7 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
   // Handle incoming events
   const handleEvent = useCallback((event: Event) => {
     // Check for logout signal
-    if (canEdit && isValidLogoutEvent(event) && onLogoutSignal && sessionCreatedAt) {
+    if (canEdit && isValidLogoutEvent(event, padId) && onLogoutSignal && sessionCreatedAt) {
       // Logic: If we see a logout event that was created AFTER our session started,
       // it means a newer session was created elsewhere. We should logout.
       // event.created_at is in seconds.
