@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createNewPad } from '../lib/keys'
 import { createAndStoreSession, getVerifiedStoredSession, clearSession } from '../lib/sessionStorage'
 import { getPublicKey } from 'nostr-tools/pure'
@@ -46,6 +46,8 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
   const [showSecretError, setShowSecretError] = useState('')
   const [isConfirming, setIsConfirming] = useState(false)
 
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   useEffect(() => {
     getVerifiedStoredSession().then(result => {
       // Only show padId if integrity verification passes
@@ -53,6 +55,16 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     }).catch(error => {
       console.error('Failed to get stored session:', error)
     })
+  }, [])
+
+  // Cleanup copy timeout on unmount
+  useEffect(() => {
+    const ref = copyTimeoutRef
+    return () => {
+      if (ref.current) {
+        clearTimeout(ref.current)
+      }
+    }
   }, [])
 
   const handleStartNewSession = async () => {
@@ -172,19 +184,33 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
 
   const copySecret = async () => {
     if (!newPadData) return
+
+    // Clear any existing timeout
+    if (copyTimeoutRef.current) {
+      clearTimeout(copyTimeoutRef.current)
+      copyTimeoutRef.current = null
+    }
+
     // Reset states before attempting
     setCopied(false)
     setCopyError(false)
+
     try {
       await navigator.clipboard.writeText(newPadData.secret)
       setCopied(true)
       // Auto-reset success message after 3 seconds
-      setTimeout(() => setCopied(false), 3000)
+      copyTimeoutRef.current = setTimeout(() => {
+        setCopied(false)
+        copyTimeoutRef.current = null
+      }, 3000)
     } catch (error) {
       console.error('Failed to copy:', error)
       setCopyError(true)
       // Auto-reset error message after 5 seconds
-      setTimeout(() => setCopyError(false), 5000)
+      copyTimeoutRef.current = setTimeout(() => {
+        setCopyError(false)
+        copyTimeoutRef.current = null
+      }, 5000)
     }
   }
 
