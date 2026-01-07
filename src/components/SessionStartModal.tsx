@@ -44,7 +44,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     if (!newPadData) return
     try {
       await createAndStoreSession(newPadData.padId, decode(newPadData.secret))
-      window.location.hash = newPadData.padId
+      window.location.hash = `${newPadData.padId}:rw`
       onSessionStarted()
     } catch (error) {
       console.error('Failed to store session:', error)
@@ -70,7 +70,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
       const padId = encodeFixed(pubkeyBytes.slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
 
       await createAndStoreSession(padId, secretKey)
-      window.location.hash = padId
+      window.location.hash = `${padId}:rw`
       onSessionStarted()
     } catch (error) {
       console.error('Failed to import session:', error)
