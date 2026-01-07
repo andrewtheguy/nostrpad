@@ -12,7 +12,7 @@ export interface PadKeys {
 
 export interface ParsedUrl {
   padId: string | null
-  secret: string | null
+  isEdit: boolean
 }
 
 /**
@@ -33,48 +33,67 @@ export function createNewPad(): PadKeys {
 }
 
 /**
- * Parse hash URL into padId
- * Format: #padId
+ * Parse hash URL into padId and edit flag
+ * Formats: #padId or #padId:rw
  */
 export function parseUrl(hash: string): ParsedUrl {
   // Remove leading # if present
   const cleanHash = hash.startsWith('#') ? hash.slice(1) : hash
 
   if (!cleanHash) {
-    return { padId: null, secret: null }
+    return { padId: null, isEdit: false }
   }
 
-  // Only padId, no secret
-  return { padId: cleanHash, secret: null }
+  const colonIndex = cleanHash.indexOf(':')
+
+  if (colonIndex === -1) {
+    // View-only URL: just padId
+    return { padId: cleanHash, isEdit: false }
+  }
+
+  // Check if it's :rw
+  const suffix = cleanHash.slice(colonIndex + 1)
+  if (suffix === 'rw') {
+    const padId = cleanHash.slice(0, colonIndex)
+    return { padId, isEdit: true }
+  }
+
+  // Invalid format, treat as view-only
+  return { padId: cleanHash, isEdit: false }
 }
 
 /**
- * Derive keys from padId, checking IndexedDB for stored session
+ * Derive keys from padId and edit intent, checking IndexedDB for stored session
  * Returns null if derivation fails
  */
-export async function deriveKeys(padId: string): Promise<{ secretKey: Uint8Array | null, publicKey: string } | null> {
+export async function deriveKeys(padId: string, isEdit: boolean): Promise<{ secretKey: Uint8Array | null, publicKey: string } | null> {
   try {
-    // Check if we have a stored session for this padId
-    const storedSecretKey = await getDecryptedPrivateKey(padId)
-    if (storedSecretKey) {
-      // We have the secret key from storage
-      if (storedSecretKey.length !== 32) {
-        return null
+    if (isEdit) {
+      // Edit mode requested: check if we have a stored session for this padId
+      const storedSecretKey = await getDecryptedPrivateKey(padId)
+      if (storedSecretKey) {
+        // We have the secret key from storage
+        if (storedSecretKey.length !== 32) {
+          return null
+        }
+        const publicKey = getPublicKey(storedSecretKey)
+
+        // Verify padId matches (first PAD_ID_BYTES bytes of pubkey)
+        const pubkeyBytes = hexToBytes(publicKey)
+        const expectedPadId = encodeFixed(pubkeyBytes.slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
+
+        if (expectedPadId !== padId) {
+          console.warn('PadId mismatch - stored key may be corrupted')
+          return null
+        }
+
+        return { secretKey: storedSecretKey, publicKey }
+      } else {
+        // Edit requested but no stored session: view-only
+        return { secretKey: null, publicKey: '' }
       }
-      const publicKey = getPublicKey(storedSecretKey)
-
-      // Verify padId matches (first PAD_ID_BYTES bytes of pubkey)
-      const pubkeyBytes = hexToBytes(publicKey)
-      const expectedPadId = encodeFixed(pubkeyBytes.slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
-
-      if (expectedPadId !== padId) {
-        console.warn('PadId mismatch - stored key may be corrupted')
-        return null
-      }
-
-      return { secretKey: storedSecretKey, publicKey }
     } else {
-      // View-only mode: no stored session
+      // View-only mode: no need to check storage
       return { secretKey: null, publicKey: '' }
     }
   } catch (error) {
@@ -84,11 +103,14 @@ export async function deriveKeys(padId: string): Promise<{ secretKey: Uint8Array
 }
 
 /**
- * Generate URL for sharing
+ * Generate URLs for sharing
  */
-export function generateShareUrl(padId: string): string {
+export function generateShareUrls(padId: string): { viewerUrl: string, editorUrl: string } {
   const base = window.location.origin + window.location.pathname
-  return `${base}#${padId}`
+  return {
+    viewerUrl: `${base}#${padId}`,
+    editorUrl: `${base}#${padId}:rw`
+  }
 }
 
 // Helper functions

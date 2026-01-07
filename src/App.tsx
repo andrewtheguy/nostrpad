@@ -4,12 +4,12 @@ import { PadPage } from './components/PadPage'
 import { SessionStartModal } from './components/SessionStartModal'
 
 function App() {
-  const [route, setRoute] = useState<{ padId: string } | null>(null)
+  const [route, setRoute] = useState<{ padId: string; isEdit: boolean } | null>(null)
   const [showModal, setShowModal] = useState(false)
 
   useEffect(() => {
     const handleHashChange = () => {
-      const { padId } = parseUrl(window.location.hash)
+      const { padId, isEdit } = parseUrl(window.location.hash)
 
       if (!padId) {
         setShowModal(true)
@@ -17,7 +17,7 @@ function App() {
         return
       }
 
-      setRoute({ padId })
+      setRoute({ padId, isEdit })
       setShowModal(false)
     }
 
@@ -46,7 +46,7 @@ function App() {
     )
   }
 
-  return <PadPage padId={route.padId} />
+  return <PadPage padId={route.padId} isEdit={route.isEdit} />
 }
 
 export default App

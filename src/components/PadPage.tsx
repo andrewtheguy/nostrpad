@@ -7,9 +7,10 @@ import { Footer } from './Footer'
 
 interface PadPageProps {
   padId: string
+  isEdit: boolean
 }
 
-export function PadPage({ padId }: PadPageProps) {
+export function PadPage({ padId, isEdit }: PadPageProps) {
   const [keys, setKeys] = useState<{ secretKey: Uint8Array | null, publicKey: string } | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -30,12 +31,17 @@ export function PadPage({ padId }: PadPageProps) {
 
   useEffect(() => {
     const loadKeys = async () => {
-      const derivedKeys = await deriveKeys(padId)
+      const derivedKeys = await deriveKeys(padId, isEdit)
       setKeys(derivedKeys)
       setLoading(false)
+
+      // If edit was requested but no key found, redirect to view-only URL
+      if (isEdit && !derivedKeys?.secretKey) {
+        window.location.hash = padId
+      }
     }
     loadKeys()
-  }, [padId])
+  }, [padId, isEdit])
 
   if (loading) {
     return (

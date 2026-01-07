@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import QRCode from 'qrcode'
-import { generateShareUrl } from '../lib/keys'
+import { generateShareUrls } from '../lib/keys'
 
 interface ShareModalProps {
   padId: string
@@ -8,14 +8,15 @@ interface ShareModalProps {
 }
 
 export function ShareModal({ padId, onClose }: ShareModalProps) {
-  const [copied, setCopied] = useState(false)
+  const [copiedViewer, setCopiedViewer] = useState(false)
+  const [copiedEditor, setCopiedEditor] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
-  const shareUrl = generateShareUrl(padId)
+  const { viewerUrl, editorUrl } = generateShareUrls(padId)
 
   useEffect(() => {
     if (canvasRef.current) {
-      QRCode.toCanvas(canvasRef.current, shareUrl, {
+      QRCode.toCanvas(canvasRef.current, viewerUrl, {
         width: 160,
         margin: 2,
         color: {
@@ -24,13 +25,23 @@ export function ShareModal({ padId, onClose }: ShareModalProps) {
         }
       })
     }
-  }, [shareUrl])
+  }, [viewerUrl])
 
-  const copyToClipboard = async () => {
+  const copyViewerUrl = async () => {
     try {
-      await navigator.clipboard.writeText(shareUrl)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      await navigator.clipboard.writeText(viewerUrl)
+      setCopiedViewer(true)
+      setTimeout(() => setCopiedViewer(false), 2000)
+    } catch (error) {
+      console.error('Failed to copy:', error)
+    }
+  }
+
+  const copyEditorUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(editorUrl)
+      setCopiedEditor(true)
+      setTimeout(() => setCopiedEditor(false), 2000)
     } catch (error) {
       console.error('Failed to copy:', error)
     }
@@ -47,28 +58,51 @@ export function ShareModal({ padId, onClose }: ShareModalProps) {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Share URL
+              Viewer URL (Read Only)
             </label>
             <div className="flex gap-2 mb-3">
               <input
                 type="text"
                 readOnly
-                value={shareUrl}
+                value={viewerUrl}
                 className="flex-1 px-3 py-2 bg-gray-700 text-gray-100 rounded text-sm font-mono"
               />
               <button
-                onClick={copyToClipboard}
+                onClick={copyViewerUrl}
                 className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-colors"
               >
-                {copied ? 'Copied!' : 'Copy'}
+                {copiedViewer ? 'Copied!' : 'Copy'}
               </button>
             </div>
             <p className="text-xs text-gray-500 mb-4">
-              Share this link with anyone who should view the pad. Edit access requires starting a session.
+              Share this link with anyone who should view the pad.
             </p>
-            <div className="flex justify-center">
+            <div className="flex justify-center mb-4">
               <canvas ref={canvasRef} className="rounded" />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Editor URL (Read/Write)
+            </label>
+            <div className="flex gap-2 mb-3">
+              <input
+                type="text"
+                readOnly
+                value={editorUrl}
+                className="flex-1 px-3 py-2 bg-gray-700 text-gray-100 rounded text-sm font-mono"
+              />
+              <button
+                onClick={copyEditorUrl}
+                className="px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded text-sm transition-colors"
+              >
+                {copiedEditor ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+            <p className="text-xs text-gray-500">
+              Share this link to allow editing. Recipients must have edit access (via session).
+            </p>
           </div>
         </div>
 
