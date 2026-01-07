@@ -51,15 +51,22 @@ export function parseUrl(hash: string): ParsedUrl {
     return { padId: cleanHash, isEdit: false }
   }
 
-  // Check if it's :rw
+  // Check suffix after colon
   const suffix = cleanHash.slice(colonIndex + 1)
+  const padId = cleanHash.slice(0, colonIndex)
+
   if (suffix === 'rw') {
-    const padId = cleanHash.slice(0, colonIndex)
     return { padId, isEdit: true }
   }
 
-  // Invalid format, treat as view-only
-  return { padId: cleanHash, isEdit: false }
+  if (suffix === '') {
+    // Trailing colon with no suffix: treat as view-only
+    return { padId, isEdit: false }
+  }
+
+  // Invalid suffix format
+  console.warn(`Invalid URL suffix ':${suffix}' - expected ':rw' or no suffix`)
+  return { padId: null, isEdit: false }
 }
 
 /**

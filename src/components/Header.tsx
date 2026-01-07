@@ -111,8 +111,10 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content }: HeaderP
           <button
             onClick={handleClearSession}
             className="px-2 py-1 text-xs sm:text-sm bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+            title="Clear session"
           >
-            Clear Session
+            <span className="sm:hidden">🗑️</span>
+            <span className="hidden sm:inline">Clear Session</span>
           </button>
           <button
             onClick={() => setShowShareModal(true)}
