@@ -94,14 +94,18 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content }: HeaderP
           <button
             onClick={handleCopy}
             className="px-2 py-1 text-xs sm:text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
+            title={copied ? 'Copied!' : 'Copy content'}
           >
-            {copied ? '✓Copied' : 'Copy'}
+            <span className="sm:hidden">{copied ? '✓' : '📋'}</span>
+            <span className="hidden sm:inline">{copied ? '✓Copied' : 'Copy'}</span>
           </button>
           <button
             onClick={handleDownload}
             className="px-2 py-1 text-xs sm:text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
+            title="Download content"
           >
-            Download
+            <span className="sm:hidden">⬇️</span>
+            <span className="hidden sm:inline">Download</span>
           </button>
           <button
             onClick={handleClearSession}
