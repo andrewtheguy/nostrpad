@@ -414,6 +414,11 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
               Clear Saved Session
             </button>
           )}
+          <div className="pt-4 border-t border-gray-700">
+            <p className="text-gray-400 text-xs italic text-center">
+              Note: NostrPad is designed for temporary sharing rather than long-term storage. Sessions and data are ephemeral and may be purged periodically. Always have a backup of your data that you want to keep elsewhere.
+            </p>
+          </div>
         </div>
       </div>
     </div>

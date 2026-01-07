@@ -2,7 +2,7 @@
 
 A simple shared notepad powered by Nostr relays. Create a pad, share the link, and collaborate in real-time.
 
-> **Note**: NostrPad is designed for **temporary sharing** and collaboration. Sessions and data are ephemeral and **can be cleared from time to time** (e.g. browser updates, database upgrades, or relay limits). Always back up important information.
+> **Note**: NostrPad is designed for **temporary sharing** and collaboration rather than long-term storage. Sessions and data are ephemeral and **can be cleared from time to time** (e.g. browser updates, database upgrades, or relay limits). Always back up the data you want to keep elsewhere.
 
 ## Features
 
