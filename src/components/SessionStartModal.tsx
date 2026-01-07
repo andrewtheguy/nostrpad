@@ -165,7 +165,11 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
       onSessionStarted()
     } catch (error) {
       console.error('Failed to import session:', error)
-      setImportError('Invalid secret key')
+      if (error instanceof Error) {
+        setImportError(error.message)
+      } else {
+        setImportError('Failed to import session. Please check console for details.')
+      }
     }
   }
 
