@@ -15,7 +15,7 @@ function hexToBytes(hex: string): Uint8Array {
 }
 
 interface SessionStartModalProps {
-  onSessionStarted: () => void
+  onSessionStarted: (padRoute: { padId: string; isEdit: boolean }) => void
 }
 
 type ModalMode = 'choice' | 'show-secret' | 'import'
@@ -45,7 +45,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     try {
       await createAndStoreSession(newPadData.padId, decode(newPadData.secret))
       window.location.hash = `${newPadData.padId}:rw`
-      onSessionStarted()
+      onSessionStarted({ padId: newPadData.padId, isEdit: true })
     } catch (error) {
       console.error('Failed to store session:', error)
     }
@@ -71,7 +71,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
 
       await createAndStoreSession(padId, secretKey)
       window.location.hash = `${padId}:rw`
-      onSessionStarted()
+      onSessionStarted({ padId, isEdit: true })
     } catch (error) {
       console.error('Failed to import session:', error)
       setImportError('Invalid secret key')

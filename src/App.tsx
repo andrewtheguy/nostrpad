@@ -29,9 +29,16 @@ function App() {
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [])
 
-  const handleSessionStarted = () => {
+  const handleSessionStarted = (padRoute: { padId: string; isEdit: boolean } | null) => {
     setShowModal(false)
-    // The hash change will trigger re-parse
+    if (padRoute) {
+      setRoute(padRoute)
+    } else {
+      // Fallback: if no pad info provided, show modal again after 2s
+      setTimeout(() => {
+        setShowModal(true)
+      }, 2000)
+    }
   }
 
   if (showModal) {
