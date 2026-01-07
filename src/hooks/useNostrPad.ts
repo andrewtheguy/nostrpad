@@ -82,6 +82,7 @@ export function useNostrPad({ padId, publicKey, secretKey }: UseNostrPadOptions)
     setContentState('')
     setFoundPublicKey(publicKey || null)
     setLastSaved(null)
+    setIsSaving(false)
     latestEventRef.current = null
     latestTimestampRef.current = 0
     latestTextRef.current = ''

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { parseUrl } from './lib/keys'
 import { PadPage } from './components/PadPage'
 import { SessionStartModal } from './components/SessionStartModal'
@@ -6,7 +6,6 @@ import { SessionStartModal } from './components/SessionStartModal'
 function App() {
   const [route, setRoute] = useState<{ padId: string; isEdit: boolean } | null>(null)
   const [showModal, setShowModal] = useState(false)
-  const modalTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -29,21 +28,13 @@ function App() {
     window.addEventListener('hashchange', handleHashChange)
     return () => {
       window.removeEventListener('hashchange', handleHashChange)
-      clearTimeout(modalTimeoutRef.current!)
     }
   }, [])
 
-  const handleSessionStarted = (padRoute: { padId: string; isEdit: boolean } | null) => {
+  // SessionStartModal updates window.location.hash before calling this callback,
+  // so the hashchange event will update route state. We just close the modal here.
+  const handleSessionStarted = () => {
     setShowModal(false)
-    if (padRoute) {
-      setRoute(padRoute)
-    } else {
-      // Fallback: if no pad info provided, show modal again after 2s
-      clearTimeout(modalTimeoutRef.current!)
-      modalTimeoutRef.current = setTimeout(() => {
-        setShowModal(true)
-      }, 2000)
-    }
   }
 
   if (showModal) {
