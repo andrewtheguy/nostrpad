@@ -27,6 +27,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
   const [importError, setImportError] = useState('')
   const [newPadData, setNewPadData] = useState<{ padId: string; secret: string } | null>(null)
   const [copied, setCopied] = useState(false)
+  const [copyError, setCopyError] = useState(false)
 
   const handleStartNewSession = async () => {
     setIsCreating(true)
@@ -85,8 +86,11 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     try {
       await navigator.clipboard.writeText(newPadData.secret)
       setCopied(true)
+      setCopyError(false)
     } catch (error) {
       console.error('Failed to copy:', error)
+      setCopyError(true)
+      setCopied(false)
     }
   }
 
@@ -109,6 +113,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
             </button>
           </div>
           {copied && <p className="text-green-400 text-sm mb-4">Copied to clipboard!</p>}
+          {copyError && <p className="text-red-400 text-sm mb-4">Failed to copy to clipboard</p>}
           <div className="flex gap-3">
             <button
               onClick={handleConfirmNewSession}
