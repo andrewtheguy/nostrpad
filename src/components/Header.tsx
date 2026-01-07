@@ -52,6 +52,7 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content }: HeaderP
         window.location.href = '/'
       } catch (error) {
         console.error('Failed to clear session:', error)
+        alert('Failed to clear session. Please try again.')
       }
     }
   }
