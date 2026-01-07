@@ -26,6 +26,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
   const [importSecret, setImportSecret] = useState('')
   const [importError, setImportError] = useState('')
   const [newPadData, setNewPadData] = useState<{ padId: string; secret: string } | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const handleStartNewSession = async () => {
     setIsCreating(true)
@@ -41,6 +42,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
   }
 
   const handleConfirmNewSession = async () => {
+    if (!confirm('Are you sure you have copied the secret key? This is your only chance to save it for backup.')) return
     if (!newPadData) return
     try {
       await createAndStoreSession(newPadData.padId, decode(newPadData.secret))
@@ -82,8 +84,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     if (!newPadData) return
     try {
       await navigator.clipboard.writeText(newPadData.secret)
-      // Could show a copied message, but since it's one-time, just proceed
-      handleConfirmNewSession()
+      setCopied(true)
     } catch (error) {
       console.error('Failed to copy:', error)
     }
@@ -95,23 +96,25 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
         <div className="bg-gray-800 rounded-lg p-8 max-w-lg w-full mx-4">
           <h2 className="text-2xl font-bold text-white mb-4">Session Created</h2>
           <p className="text-gray-300 mb-4">
-            Your new session has been created. Copy the secret key below - this is your only chance to save it for backup:
+            Your new session has been created. Copy the secret key below - this is your only chance to save it for backup. Make sure to copy it before continuing.
           </p>
-          <div className="bg-gray-900 p-4 rounded mb-6">
-            <code className="text-green-400 font-mono text-sm break-all">{newPadData.secret}</code>
-          </div>
-          <div className="flex gap-3">
+          <div className="bg-gray-900 p-4 rounded mb-4 flex items-center gap-2">
+            <code className="text-green-400 font-mono text-sm break-all flex-1">{newPadData.secret}</code>
             <button
               onClick={copySecret}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition-colors"
+              className="text-gray-400 hover:text-white transition-colors p-1"
+              title="Copy to clipboard"
             >
-              Copy Secret & Continue
+              📋
             </button>
+          </div>
+          {copied && <p className="text-green-400 text-sm mb-4">Copied to clipboard!</p>}
+          <div className="flex gap-3">
             <button
               onClick={handleConfirmNewSession}
-              className="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded transition-colors"
+              className="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded transition-colors"
             >
-              Continue Without Copying
+              Continue
             </button>
           </div>
         </div>
