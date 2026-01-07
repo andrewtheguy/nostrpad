@@ -31,13 +31,19 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
 
   useEffect(() => {
     const loadKeys = async () => {
-      const derivedKeys = await deriveKeys(padId, isEdit)
-      setKeys(derivedKeys)
-      setLoading(false)
-
-      // If edit was requested but no key found or decryption failed, redirect to view-only URL
-      if (isEdit && !derivedKeys?.secretKey) {
-        window.location.hash = padId
+      try {
+        const derivedKeys = await deriveKeys(padId, isEdit)
+        setKeys(derivedKeys)
+        
+        // If edit was requested but no key found or decryption failed, redirect to view-only URL
+        if (isEdit && !derivedKeys?.secretKey) {
+          window.location.hash = padId
+        }
+      } catch (error) {
+        console.error('Failed to derive keys:', error)
+        setKeys(null)
+      } finally {
+        setLoading(false)
       }
     }
     loadKeys()
