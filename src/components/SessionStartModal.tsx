@@ -49,6 +49,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
   const [showSecretError, setShowSecretError] = useState('')
   const [isConfirming, setIsConfirming] = useState(false)
   const [lastSessionCreatedAt, setLastSessionCreatedAt] = useState<number>(0)
+  const [sessionEndedByRemote, setSessionEndedByRemote] = useState(false)
 
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -87,7 +88,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
           console.log('Session invalidated by remote device')
           setLastSessionPadId(null)
           clearSession().catch(console.error)
-          alert('Your saved session was ended by another device.')
+          setSessionEndedByRemote(true)
         }
       }
     })
@@ -372,6 +373,11 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
         <p className="text-gray-300 mb-6">
           Choose how to start your session:
         </p>
+        {sessionEndedByRemote && (
+          <div className="bg-yellow-900/50 border border-yellow-600 rounded-lg p-3 mb-4">
+            <p className="text-yellow-200 text-sm">Your saved session was ended by another device.</p>
+          </div>
+        )}
         {createError && (
           <p className="text-red-400 text-sm mb-4">{createError}</p>
         )}

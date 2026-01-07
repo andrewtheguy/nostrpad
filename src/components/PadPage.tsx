@@ -26,10 +26,10 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
     // In that case, we should NOT clear it.
     try {
       const stored = await getVerifiedStoredSession()
-      const storedCreatedAt = stored?.session.createdAt || 0
-      const currentCreatedAt = keys?.sessionCreatedAt || 0
+      const storedCreatedAt = stored?.session.createdAt
+      const currentCreatedAt = keys?.sessionCreatedAt
 
-      if (storedCreatedAt > currentCreatedAt) {
+      if (storedCreatedAt && currentCreatedAt && storedCreatedAt > currentCreatedAt) {
         console.log('Skipping logout/clear: Stored session is newer (Same device update)')
         return
       }
@@ -41,7 +41,7 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
     await clearSession()
     window.location.hash = padId
     window.location.reload()
-  }, [padId, keys])
+  }, [padId, keys?.sessionCreatedAt])
 
   const {
     content,

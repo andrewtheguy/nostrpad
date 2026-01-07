@@ -106,7 +106,57 @@ The AES key is generated with `extractable: false`, meaning it cannot be exporte
 
 **Integrity Verification:**
 
-The `integrityTag` is computed as `SHA-256(padId + createdAt + iv + encryptedPrivateKey)`. This cryptographically binds the displayed padId and timestamp to the actual encrypted data, preventing tampering attacks.
+The `integrityTag` cryptographically binds the displayed padId and timestamp to the actual encrypted data, preventing tampering attacks.
+
+**serializeSession Specification:**
+
+```typescript
+function serializeSession(
+  padId: string,           // 12-character Base59 string
+  createdAt: number,       // Milliseconds since Unix epoch
+  iv: Uint8Array,          // 12 bytes (96-bit AES-GCM IV)
+  encryptedPrivateKey: Uint8Array  // 48 bytes (32-byte key + 16-byte auth tag)
+): Uint8Array {
+  // padId: UTF-8 encoded bytes (12 bytes for 12 ASCII characters)
+  const padIdBytes = new TextEncoder().encode(padId)  // 12 bytes
+
+  // createdAt: 8-byte big-endian unsigned integer
+  const createdAtBytes = new Uint8Array(8)
+  const view = new DataView(createdAtBytes.buffer)
+  view.setBigUint64(0, BigInt(createdAt), false)  // false = big-endian
+
+  // Concatenate in order: padId || createdAt || iv || encryptedPrivateKey
+  // Total: 12 + 8 + 12 + 48 = 80 bytes (no delimiters)
+  const result = new Uint8Array(padIdBytes.length + 8 + iv.length + encryptedPrivateKey.length)
+  let offset = 0
+  result.set(padIdBytes, offset);        offset += padIdBytes.length
+  result.set(createdAtBytes, offset);    offset += 8
+  result.set(iv, offset);                offset += iv.length
+  result.set(encryptedPrivateKey, offset)
+
+  return result
+}
+
+// integrityTag computation
+integrityTag = SHA-256(serializeSession(padId, createdAt, iv, encryptedPrivateKey))
+```
+
+**Example:**
+
+```
+padId:              "ABC123xyz789"
+createdAt:          1704067200000 (2024-01-01T00:00:00.000Z)
+iv:                 <12 random bytes>
+encryptedPrivateKey: <48 bytes from AES-GCM>
+
+Serialized (80 bytes):
+  Bytes  0-11:  UTF-8("ABC123xyz789")           = 0x41 0x42 0x43 0x31 0x32 0x33 0x78 0x79 0x7a 0x37 0x38 0x39
+  Bytes 12-19:  BigEndian(1704067200000)        = 0x00 0x00 0x01 0x8c 0xf3 0x4c 0x98 0x00
+  Bytes 20-31:  iv (raw bytes)
+  Bytes 32-79:  encryptedPrivateKey (raw bytes)
+
+integrityTag = SHA-256(serialized) → 32 bytes
+```
 
 **Strict Schema Enforcement:**
 Sessions without a `createdAt` timestamp (legacy sessions) are considered invalid and will not be loaded. This forces a migration to the new secure session format.
