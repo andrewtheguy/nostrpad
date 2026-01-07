@@ -1,6 +1,7 @@
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure'
 import { encode, decode, encodeFixed } from './encoding'
 import { PAD_ID_BYTES, PAD_ID_LENGTH } from './constants'
+import { getDecryptedPrivateKey } from './sessionStorage'
 
 export interface PadKeys {
   padId: string
@@ -32,8 +33,8 @@ export function createNewPad(): PadKeys {
 }
 
 /**
- * Parse hash URL into padId and optional secret
- * Formats: #padId or #padId:secret
+ * Parse hash URL into padId
+ * Format: #padId
  */
 export function parseUrl(hash: string): ParsedUrl {
   // Remove leading # if present
@@ -43,49 +44,37 @@ export function parseUrl(hash: string): ParsedUrl {
     return { padId: null, secret: null }
   }
 
-  const colonIndex = cleanHash.indexOf(':')
-
-  if (colonIndex === -1) {
-    // View-only URL: just padId
-    return { padId: cleanHash, secret: null }
-  }
-
-  // Editor URL: padId:secret
-  const padId = cleanHash.slice(0, colonIndex)
-  const secret = cleanHash.slice(colonIndex + 1)
-
-  return { padId, secret }
+  // Only padId, no secret
+  return { padId: cleanHash, secret: null }
 }
 
 /**
- * Derive keys from URL parts
+ * Derive keys from padId, checking IndexedDB for stored session
  * Returns null if derivation fails
  */
-export function deriveKeys(padId: string, secret: string | null): { secretKey: Uint8Array | null, publicKey: string } | null {
+export async function deriveKeys(padId: string): Promise<{ secretKey: Uint8Array | null, publicKey: string } | null> {
   try {
-    if (secret) {
-      // We have the secret key, derive everything from it
-      const secretKey = decode(secret)
-      if (secretKey.length !== 32) {
+    // Check if we have a stored session for this padId
+    const storedSecretKey = await getDecryptedPrivateKey(padId)
+    if (storedSecretKey) {
+      // We have the secret key from storage
+      if (storedSecretKey.length !== 32) {
         return null
       }
-      const publicKey = getPublicKey(secretKey)
+      const publicKey = getPublicKey(storedSecretKey)
 
       // Verify padId matches (first PAD_ID_BYTES bytes of pubkey)
       const pubkeyBytes = hexToBytes(publicKey)
       const expectedPadId = encodeFixed(pubkeyBytes.slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
 
       if (expectedPadId !== padId) {
-        console.warn('PadId mismatch - URL may be tampered')
-        // Still allow it to work, as padId is just for display
+        console.warn('PadId mismatch - stored key may be corrupted')
+        return null
       }
 
-      return { secretKey, publicKey }
+      return { secretKey: storedSecretKey, publicKey }
     } else {
-      // View-only mode: we only have padId (partial pubkey)
-      // We can't derive the full pubkey from partial, so we need to
-      // store the full pubkey somewhere or query relays
-      // For now, we'll query relays to find events matching this padId
+      // View-only mode: no stored session
       return { secretKey: null, publicKey: '' }
     }
   } catch (error) {
@@ -95,14 +84,11 @@ export function deriveKeys(padId: string, secret: string | null): { secretKey: U
 }
 
 /**
- * Generate URLs for sharing
+ * Generate URL for sharing
  */
-export function generateShareUrls(padId: string, secret: string): { viewerUrl: string, editorUrl: string } {
+export function generateShareUrl(padId: string): string {
   const base = window.location.origin + window.location.pathname
-  return {
-    viewerUrl: `${base}#${padId}`,
-    editorUrl: `${base}#${padId}:${secret}`
-  }
+  return `${base}#${padId}`
 }
 
 // Helper functions

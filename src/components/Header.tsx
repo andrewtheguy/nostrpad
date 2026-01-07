@@ -1,18 +1,16 @@
 import { useState } from 'react'
 import { ShareModal } from './ShareModal'
 import { InfoModal } from './InfoModal'
-import { createNewPad } from '../lib/keys'
 
 interface HeaderProps {
   isSaving: boolean
   canEdit: boolean
   lastSaved: Date | null
   padId: string
-  secret: string | null
   content: string
 }
 
-export function Header({ isSaving, canEdit, lastSaved, padId, secret, content }: HeaderProps) {
+export function Header({ isSaving, canEdit, lastSaved, padId, content }: HeaderProps) {
   const [showShareModal, setShowShareModal] = useState(false)
   const [showInfoModal, setShowInfoModal] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -23,9 +21,7 @@ export function Header({ isSaving, canEdit, lastSaved, padId, secret, content }:
   }
 
   const handleNewPad = () => {
-    const { padId: newPadId, secret: newSecret } = createNewPad()
-    window.location.hash = `${newPadId}:${newSecret}`
-    window.location.reload()
+    window.location.href = '/'
   }
 
   const handleCopy = async () => {
@@ -107,7 +103,6 @@ export function Header({ isSaving, canEdit, lastSaved, padId, secret, content }:
       {showShareModal && (
         <ShareModal
           padId={padId}
-          secret={secret}
           onClose={() => setShowShareModal(false)}
         />
       )}
