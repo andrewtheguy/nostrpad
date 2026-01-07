@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { createNewPad } from '../lib/keys'
-import { createAndStoreSession, getStoredSession } from '../lib/sessionStorage'
+import { createAndStoreSession, getStoredSession, clearSession } from '../lib/sessionStorage'
 import { getPublicKey } from 'nostr-tools/pure'
 import { decode, encodeFixed } from '../lib/encoding'
 import { PAD_ID_BYTES, PAD_ID_LENGTH } from '../lib/constants'
@@ -97,6 +97,17 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     if (!lastSessionPadId) return
     window.location.hash = `${lastSessionPadId}:rw`
     onSessionStarted({ padId: lastSessionPadId, isEdit: true })
+  }
+
+  const handleClearSession = async () => {
+    if (confirm('Are you sure you want to clear the saved session?')) {
+      try {
+        await clearSession()
+        setLastSessionPadId(null)
+      } catch (error) {
+        console.error('Failed to clear session:', error)
+      }
+    }
   }
 
   const copySecret = async () => {
@@ -211,6 +222,14 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
           >
             Import Existing Secret Key
           </button>
+          {lastSessionPadId && (
+            <button
+              onClick={handleClearSession}
+              className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm"
+            >
+              Clear Saved Session
+            </button>
+          )}
         </div>
       </div>
     </div>

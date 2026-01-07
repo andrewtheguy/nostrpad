@@ -161,3 +161,15 @@ export async function getDecryptedPrivateKey(padId: string): Promise<Uint8Array 
     return null
   }
 }
+
+export async function clearSession(): Promise<void> {
+  const db = await initDB()
+  const transaction = db.transaction([STORE_NAME], 'readwrite')
+  const store = transaction.objectStore(STORE_NAME)
+
+  return new Promise((resolve, reject) => {
+    const request = store.delete(GLOBAL_KEY)
+    request.onsuccess = () => resolve()
+    request.onerror = () => reject(request.error)
+  })
+}

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ShareModal } from './ShareModal'
 import { InfoModal } from './InfoModal'
+import { clearSession } from '../lib/sessionStorage'
 
 interface HeaderProps {
   isSaving: boolean
@@ -42,6 +43,17 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content }: HeaderP
     a.download = `nostrpad-${Date.now()}.txt`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  const handleClearSession = async () => {
+    if (confirm('Are you sure you want to clear the session? You will lose access to edit this pad.')) {
+      try {
+        await clearSession()
+        window.location.href = '/'
+      } catch (error) {
+        console.error('Failed to clear session:', error)
+      }
+    }
   }
 
   return (
@@ -90,6 +102,12 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content }: HeaderP
             className="px-2 py-1 text-xs sm:text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
           >
             Download
+          </button>
+          <button
+            onClick={handleClearSession}
+            className="px-2 py-1 text-xs sm:text-sm bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+          >
+            Clear Session
           </button>
           <button
             onClick={() => setShowShareModal(true)}
