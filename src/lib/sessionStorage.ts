@@ -1,7 +1,7 @@
 const DB_NAME = 'nostrpad-sessions'
 const DB_VERSION = 3
 const STORE_NAME = 'sessions'
-const GLOBAL_KEY = 'all-sessions'
+const GLOBAL_KEY = 'current-session'
 
 let cachedDb: IDBDatabase | Promise<IDBDatabase> | null = null
 
