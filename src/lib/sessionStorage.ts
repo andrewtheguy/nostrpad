@@ -1,5 +1,5 @@
 const DB_NAME = 'nostrpad-sessions'
-const DB_VERSION = 2
+const DB_VERSION = 3
 const STORE_NAME = 'sessions'
 const GLOBAL_KEY = 'all-sessions'
 
@@ -10,6 +10,48 @@ interface SessionData {
   encryptedPrivateKey: Uint8Array
   aesKey: CryptoKey
   iv: Uint8Array
+  integrityTag?: Uint8Array // SHA-256 hash binding padId to encrypted data
+}
+
+/**
+ * Compute integrity tag: SHA-256(padId + iv + encryptedPrivateKey)
+ * This binds the padId to the encrypted data, preventing tampering
+ */
+async function computeIntegrityTag(padId: string, iv: Uint8Array, encryptedPrivateKey: Uint8Array): Promise<Uint8Array> {
+  const encoder = new TextEncoder()
+  const padIdBytes = encoder.encode(padId)
+
+  // Concatenate: padId bytes + iv + encrypted data
+  const combined = new Uint8Array(padIdBytes.length + iv.length + encryptedPrivateKey.length)
+  combined.set(padIdBytes, 0)
+  combined.set(iv, padIdBytes.length)
+  combined.set(encryptedPrivateKey, padIdBytes.length + iv.length)
+
+  const hash = await crypto.subtle.digest('SHA-256', combined)
+  return new Uint8Array(hash)
+}
+
+/**
+ * Verify integrity tag matches the stored data
+ */
+async function verifyIntegrityTag(session: SessionData): Promise<boolean> {
+  if (!session.integrityTag) {
+    // Legacy session without integrity tag - cannot verify
+    return false
+  }
+
+  const computed = await computeIntegrityTag(session.padId, session.iv, session.encryptedPrivateKey)
+
+  if (computed.length !== session.integrityTag.length) {
+    return false
+  }
+
+  // Constant-time comparison
+  let diff = 0
+  for (let i = 0; i < computed.length; i++) {
+    diff |= computed[i] ^ session.integrityTag[i]
+  }
+  return diff === 0
 }
 
 export async function initDB(): Promise<IDBDatabase> {
@@ -52,11 +94,15 @@ export async function storeSession(padId: string, encryptedPrivateKey: Uint8Arra
   const transaction = db.transaction([STORE_NAME], 'readwrite')
   const store = transaction.objectStore(STORE_NAME)
 
+  // Compute integrity tag to bind padId to encrypted data
+  const integrityTag = await computeIntegrityTag(padId, iv, encryptedPrivateKey)
+
   const data: SessionData = {
     padId,
     encryptedPrivateKey,
     aesKey,
-    iv
+    iv,
+    integrityTag
   }
 
   return new Promise((resolve, reject) => {
@@ -127,6 +173,23 @@ export async function getStoredSession(): Promise<SessionData | null> {
     }
     request.onerror = () => reject(request.error)
   })
+}
+
+/**
+ * Get stored session with integrity verification
+ * Returns null if no session exists or integrity check fails
+ */
+export async function getVerifiedStoredSession(): Promise<{ session: SessionData; verified: boolean } | null> {
+  const session = await getStoredSession()
+  if (!session) return null
+
+  const verified = await verifyIntegrityTag(session)
+  if (!verified) {
+    // Integrity check failed - session may be tampered
+    return null
+  }
+
+  return { session, verified }
 }
 
 export async function encryptPrivateKey(privateKey: Uint8Array): Promise<{ encrypted: Uint8Array, key: CryptoKey, iv: Uint8Array }> {

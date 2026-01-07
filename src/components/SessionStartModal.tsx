@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { createNewPad } from '../lib/keys'
-import { createAndStoreSession, getStoredSession, clearSession } from '../lib/sessionStorage'
+import { createAndStoreSession, getVerifiedStoredSession, clearSession } from '../lib/sessionStorage'
 import { getPublicKey } from 'nostr-tools/pure'
 import { decode, encodeFixed } from '../lib/encoding'
 import { PAD_ID_BYTES, PAD_ID_LENGTH } from '../lib/constants'
@@ -47,8 +47,9 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
   const [isConfirming, setIsConfirming] = useState(false)
 
   useEffect(() => {
-    getStoredSession().then(session => {
-      setLastSessionPadId(session?.padId || null)
+    getVerifiedStoredSession().then(result => {
+      // Only show padId if integrity verification passes
+      setLastSessionPadId(result?.session.padId || null)
     }).catch(error => {
       console.error('Failed to get stored session:', error)
     })
@@ -131,14 +132,16 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     setResumeError('')
 
     try {
-      // Re-validate that the session still exists in storage
-      const session = await getStoredSession()
-      if (!session || session.padId !== lastSessionPadId) {
-        // Session no longer exists or padId mismatch
+      // Re-validate session with integrity check
+      const result = await getVerifiedStoredSession()
+      if (!result || result.session.padId !== lastSessionPadId) {
+        // Session no longer exists, padId mismatch, or integrity check failed
         setLastSessionPadId(null)
-        setResumeError('Session no longer exists. Please start a new session or import your secret key.')
+        setResumeError('Session no longer exists or has been tampered with. Please start a new session or import your secret key.')
         return
       }
+
+      const { session } = result
 
       // Validate session data is not corrupted
       if (!session.encryptedPrivateKey || !session.aesKey || !session.iv) {

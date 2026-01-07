@@ -95,15 +95,22 @@ interface SessionData {
   encryptedPrivateKey: Uint8Array  // AES-GCM encrypted
   aesKey: CryptoKey                // Non-extractable
   iv: Uint8Array                   // 96-bit IV
+  integrityTag: Uint8Array         // SHA-256 binding padId to encrypted data
 }
 ```
 
 The AES key is generated with `extractable: false`, meaning it cannot be exported from the browser's crypto subsystem. This provides protection against JavaScript-based key theft.
 
+**Integrity Verification:**
+
+The `integrityTag` is computed as `SHA-256(padId + iv + encryptedPrivateKey)`. This cryptographically binds the displayed padId to the actual encrypted data, preventing tampering attacks where an attacker modifies the padId in IndexedDB to display a fake identifier.
+
+When loading a session for display, the integrity tag is verified before showing the padId to the user.
+
 **Flow:**
-1. New session: Generate keypair → Encrypt secret key → Store in IndexedDB
-2. Resume session: Load from IndexedDB → Decrypt secret key → Derive keys
-3. Import session: Decode Base59 secret → Encrypt → Store in IndexedDB
+1. New session: Generate keypair → Encrypt secret key → Compute integrity tag → Store in IndexedDB
+2. Resume session: Load from IndexedDB → Verify integrity tag → Decrypt secret key → Derive keys
+3. Import session: Decode Base59 secret → Encrypt → Compute integrity tag → Store in IndexedDB
 
 ### Content Encryption
 
