@@ -66,9 +66,9 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoading
           <button
             type="button"
             className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-700 text-gray-200 text-xs hover:bg-gray-600"
-            title="Encrypted with a key derived from the pad ID. Anyone with the view-only link can decrypt."
+            title="NostrPad is designed for temporary sharing. Sessions and data are ephemeral."
             onClick={() => setShowInfoModal(true)}
-            aria-label="Encryption info"
+            aria-label="Info"
           >
             i
           </button>

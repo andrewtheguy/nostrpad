@@ -62,13 +62,9 @@ export function InfoModal({ onClose }: InfoModalProps) {
         className="bg-gray-800 rounded-lg p-6 max-w-lg w-full mx-4 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id="info-modal-title" className="text-xl font-semibold text-white mb-3">Encryption Info</h2>
-        <p className="text-sm text-gray-300 mb-3">
-          Pad content is encrypted using NIP-44 with a key derived from the pad ID.
-          Anyone with the view-only link can decrypt and read the content.
-        </p>
-        <p className="text-xs text-gray-500 mb-6">
-          Treat pad IDs as shareable identifiers, not secrets.
+        <h2 id="info-modal-title" className="text-xl font-semibold text-white mb-3">Note</h2>
+        <p className="text-sm text-gray-300 mb-6">
+          NostrPad is designed for temporary sharing rather than long-term storage. Sessions and data are ephemeral and may be purged periodically. Always have a backup of your data that you want to keep elsewhere.
         </p>
         <div className="flex justify-end">
           <button
