@@ -193,19 +193,23 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
           <p className="text-gray-300 mb-4">
             Your new session has been created. Copy the secret key below - this is your only chance to save it for backup. Make sure to copy it before continuing.
           </p>
-          <div className="bg-gray-900 p-4 rounded mb-4 flex items-center gap-2">
+          <div className="bg-gray-900 p-4 rounded flex items-center gap-2">
             <code className="text-green-400 font-mono text-sm break-all flex-1">{newPadData.secret}</code>
             <button
               onClick={copySecret}
-              className="text-gray-400 hover:text-white transition-colors p-1"
+              className="text-gray-400 hover:text-white transition-colors p-1 flex items-center gap-1"
               title="Copy to clipboard"
             >
+              <span className={`text-xs transition-opacity ${copied ? 'opacity-100 text-green-400' : 'opacity-0'}`}>
+                ✓
+              </span>
               📋
             </button>
           </div>
-          {copied && <p className="text-green-400 text-sm mb-4">Copied to clipboard!</p>}
-          {copyError && <p className="text-red-400 text-sm mb-4">Failed to copy to clipboard</p>}
-          {showSecretError && <p className="text-red-400 text-sm mb-4">{showSecretError}</p>}
+          <div className="h-6 mb-2">
+            {copyError && <p className="text-red-400 text-sm">Failed to copy. Please select and copy the key manually.</p>}
+            {showSecretError && <p className="text-red-400 text-sm">{showSecretError}</p>}
+          </div>
           <div className="flex gap-3">
             <button
               onClick={handleDismissShowSecret}
