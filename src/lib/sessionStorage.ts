@@ -87,6 +87,8 @@ export async function initDB(): Promise<IDBDatabase> {
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       // Clear database on upgrade to ensure clean state
+      // This is acceptable because NostrPad is designed for temporary sharing,
+      // not permanent storage. Users should expect sessions to be ephemeral.
       if (db.objectStoreNames.contains(STORE_NAME)) {
         db.deleteObjectStore(STORE_NAME)
       }

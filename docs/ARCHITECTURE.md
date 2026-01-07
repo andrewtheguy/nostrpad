@@ -6,6 +6,8 @@ This document describes the technical architecture of NostrPad.
 
 NostrPad is a decentralized notepad application built on the Nostr protocol. It uses client-side encryption, IndexedDB for session persistence, and communicates with Nostr relays for real-time data synchronization.
 
+> **Note**: NostrPad is designed for **temporary sharing** and collaboration, not permanent storage. Sessions and data are treated as ephemeral. Always back up important information elsewhere.
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        Browser                               │
@@ -113,6 +115,25 @@ Sessions without a `createdAt` timestamp (legacy sessions) are considered invali
 1. New session: Generate keypair → Encrypt secret key → Compute integrity tag → Store in IndexedDB
 2. Resume session: Load from IndexedDB → Verify integrity tag → Decrypt secret key → Derive keys
 3. Import session: Decode Base59 secret → Encrypt → Compute integrity tag → Store in IndexedDB
+
+**Temporary Storage Philosophy:**
+Since NostrPad is a tool for temporary sharing, the local session storage is not guaranteed to persist indefinitely. 
+
+**Database Schema Upgrades:**
+The application uses a destructive upgrade strategy for IndexedDB. When the database version is incremented (due to schema changes), the `onupgradeneeded` handler **deletes the existing object store** before recreating it. 
+- This ensures a clean state and prevents compatibility issues with outdated session formats.
+- Users must re-import their secret keys after an application update that changes the schema.
+- This is by design, aligning with the ephemeral nature of the tool.
+
+Users are encouraged to save their secret keys if they need to restore access later.
+
+**Relay Data Retention:**
+In addition to local session clearance, the content itself is stored on external Nostr relays which have their own retention policies.
+- Relays may **purge old events** to save space.
+- Relays may strictly limit the number of events per kind/author (NIP-77 limits).
+- If all relays housing a specific pad's content purge that event, the content is permanently lost unless a client republishes it.
+
+This reinforces the temporary nature of the application; neither the local session nor the remote content is guaranteed to persist.
 
 ### Session Logout & Invalidation
 
