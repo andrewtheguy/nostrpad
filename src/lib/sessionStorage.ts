@@ -3,6 +3,8 @@ const DB_VERSION = 2
 const STORE_NAME = 'sessions'
 const GLOBAL_KEY = 'all-sessions'
 
+let cachedDb: IDBDatabase | null = null
+
 interface SessionData {
   padId: string
   encryptedPrivateKey: Uint8Array
@@ -11,11 +13,22 @@ interface SessionData {
 }
 
 export async function initDB(): Promise<IDBDatabase> {
+  if (cachedDb) {
+    return cachedDb
+  }
+
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION)
 
     request.onerror = () => reject(request.error)
-    request.onsuccess = () => resolve(request.result)
+    request.onsuccess = () => {
+      cachedDb = request.result
+      cachedDb.onversionchange = () => {
+        cachedDb?.close()
+        cachedDb = null
+      }
+      resolve(request.result)
+    }
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
