@@ -43,7 +43,6 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
   const currentPadIdRef = useRef(padId)
 
   const canEdit = secretKey !== null
-  const storageKey = `nostrpad:${padId}`
 
   // Use relay discovery
   const {
@@ -109,22 +108,6 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
     isLocalChangeRef.current = false
     pendingPublishRef.current = false
   }, [padId, publicKey])
-
-  // Load content from session storage on init (editor mode only)
-  useEffect(() => {
-    if (!canEdit) return
-    const saved = sessionStorage.getItem(storageKey)
-    if (saved) {
-      setContentState(saved)
-      latestTextRef.current = saved
-    }
-  }, [canEdit, storageKey])
-
-  // Save to session storage on content change (editor mode only)
-  useEffect(() => {
-    if (!canEdit) return
-    sessionStorage.setItem(storageKey, content)
-  }, [canEdit, content, storageKey])
 
   // Initialize pool for editor mode (publish AND listen for logout)
   useEffect(() => {

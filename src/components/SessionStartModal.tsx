@@ -133,8 +133,6 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     setShowSecretError('')
     try {
       await createAndStoreSession(newPadData.padId, decode(newPadData.secret))
-      // Clear any stale editor content from previous sessions
-      window.sessionStorage.removeItem(`nostrpad:${newPadData.padId}`)
       window.location.hash = `${newPadData.padId}:rw`
       onSessionStarted()
     } catch (error) {
@@ -195,8 +193,6 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
       const sessionTimestamp = (logoutEvent.created_at * 1000) + 1000
 
       await createAndStoreSession(padId, secretKey, sessionTimestamp)
-      // Clear any stale editor content from previous sessions
-      window.sessionStorage.removeItem(`nostrpad:${padId}`)
       window.location.hash = `${padId}:rw`
       onSessionStarted()
     } catch (error) {

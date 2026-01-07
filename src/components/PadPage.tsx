@@ -39,7 +39,6 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
 
     alert('Session invalidated: This pad was opened in editor mode on another device.')
     await clearSession()
-    window.sessionStorage.removeItem(`nostrpad:${padId}`)
     window.location.hash = padId
     window.location.reload()
   }, [padId, keys])
