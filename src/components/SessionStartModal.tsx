@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { createNewPad } from '../lib/keys'
+import { navigateTo } from '../lib/navigation'
 import { createAndStoreSession, getVerifiedStoredSession, clearSession } from '../lib/sessionStorage'
 import { getPublicKey } from 'nostr-tools/pure'
 import { SimplePool } from 'nostr-tools/pool'
@@ -7,6 +8,7 @@ import { BOOTSTRAP_RELAYS } from '../lib/constants'
 import { createLogoutEvent, publishEvent } from '../lib/nostr'
 import { decode, encodeFixed } from '../lib/encoding'
 import { PAD_ID_BYTES, PAD_ID_LENGTH } from '../lib/constants'
+import { PairModal } from './PairModal'
 
 // Helper function
 function hexToBytes(hex: string): Uint8Array {
@@ -50,6 +52,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
   const [isConfirming, setIsConfirming] = useState(false)
   const [lastSessionCreatedAt, setLastSessionCreatedAt] = useState<number>(0)
   const [sessionEndedByRemote, setSessionEndedByRemote] = useState(false)
+  const [showPairModal, setShowPairModal] = useState(false)
 
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -138,7 +141,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     setShowSecretError('')
     try {
       await createAndStoreSession(newPadData.padId, decode(newPadData.secret))
-      window.location.hash = `${newPadData.padId}:rw`
+      navigateTo('/s/' + newPadData.padId + '/rw')
       onSessionStarted()
     } catch (error) {
       console.error('Failed to store session:', error)
@@ -198,7 +201,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
       const sessionTimestamp = (logoutEvent.created_at * 1000) + 1000
 
       await createAndStoreSession(padId, secretKey, sessionTimestamp)
-      window.location.hash = `${padId}:rw`
+      navigateTo('/s/' + padId + '/rw')
       onSessionStarted()
     } catch (error) {
       console.error('Failed to import session:', error)
@@ -235,7 +238,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
         return
       }
 
-      window.location.hash = `${lastSessionPadId}:rw`
+      navigateTo('/s/' + lastSessionPadId + '/rw')
       onSessionStarted()
     } catch (error) {
       console.error('Failed to validate session:', error)
@@ -410,6 +413,12 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
           >
             Import Existing Secret Key
           </button>
+          <button
+            onClick={() => setShowPairModal(true)}
+            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+          >
+            Pair Mode
+          </button>
           {lastSessionPadId && (
             <button
               onClick={handleClearSession}
@@ -425,6 +434,9 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
           </div>
         </div>
       </div>
+      {showPairModal && (
+        <PairModal onClose={() => setShowPairModal(false)} />
+      )}
     </div>
   )
 }

@@ -24,3 +24,7 @@ export const MAX_CONTENT_LENGTH = 16000
 // URL-safe Base59 alphabet: standard Base58 plus '-' and '_' (59 characters)
 // Excludes 0, O, I, l, 1 for unambiguous characters
 export const ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz-_'
+
+// Pair code: lowercase base32 alphabet (excludes 0/1/i/l/o/u for non-ambiguity, includes - and _)
+export const PAIR_CODE_ALPHABET = '23456789abcdefghjkmnpqrstvwxyz-_'
+export const PAIR_CODE_LENGTH = 6

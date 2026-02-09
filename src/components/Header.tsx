@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ShareModal } from './ShareModal'
 import { InfoModal } from './InfoModal'
 import { PairModal } from './PairModal'
+import { navigateTo } from '../lib/navigation'
 import { clearSession } from '../lib/sessionStorage'
 
 interface HeaderProps {
@@ -15,9 +16,10 @@ interface HeaderProps {
   onExitSplit?: () => void
   onClearContent?: () => void
   remoteContent?: string
+  pairCode?: string
 }
 
-export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoadingContent, isSplitMode, onExitSplit, onClearContent, remoteContent }: HeaderProps) {
+export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoadingContent, isSplitMode, onExitSplit, onClearContent, remoteContent, pairCode }: HeaderProps) {
   const [showShareModal, setShowShareModal] = useState(false)
   const [showInfoModal, setShowInfoModal] = useState(false)
   const [showPairModal, setShowPairModal] = useState(false)
@@ -29,7 +31,7 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoading
   }
 
   const handleHome = () => {
-    window.location.href = '/'
+    navigateTo('/')
   }
 
   const handleCopy = async () => {
@@ -80,7 +82,9 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoading
             i
           </button>
           {isSplitMode && (
-            <span className="px-2 py-0.5 text-xs font-medium bg-purple-600 text-purple-100 rounded">Split</span>
+            <span className="px-2 py-0.5 text-xs font-medium bg-purple-600 text-purple-100 rounded">
+              {pairCode ? `Pair: ${pairCode}` : 'Split'}
+            </span>
           )}
           {!canEdit && !isSplitMode && (
             <span className="px-2 py-0.5 text-xs font-medium bg-yellow-600 text-yellow-100 rounded">View Only</span>
@@ -181,7 +185,6 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoading
       )}
       {showPairModal && (
         <PairModal
-          padId={padId}
           onClose={() => setShowPairModal(false)}
         />
       )}

@@ -1,41 +1,56 @@
 import { useState, useEffect } from 'react'
 import { parseUrl } from './lib/keys'
+import { PAIR_CODE_LENGTH } from './lib/constants'
 import { PadPage } from './components/PadPage'
 import { SplitPadPage } from './components/SplitPadPage'
 import { SessionStartModal } from './components/SessionStartModal'
 
 function App() {
-  const [route, setRoute] = useState<{ padId: string; isEdit: boolean; remotePadId: string | null } | null>(null)
+  const [route, setRoute] = useState<{ padId: string; isEdit: boolean } | null>(null)
+  const [pairRoute, setPairRoute] = useState<{ pairCode: string; pairRole: 1 | 2 } | null>(null)
   const [showModal, setShowModal] = useState(false)
 
   useEffect(() => {
-    const handleHashChange = () => {
-      const { padId, isEdit, remotePadId } = parseUrl(window.location.hash)
-
-      if (!padId) {
-        setShowModal(true)
+    const handleRouteChange = () => {
+      // 1. Check for pair mode: /p/CODE/1 or /p/CODE/2
+      const pairMatch = window.location.pathname.match(/^\/p\/([a-z0-9_-]+)\/([12])$/)
+      if (pairMatch && pairMatch[1].length === PAIR_CODE_LENGTH) {
+        setPairRoute({ pairCode: pairMatch[1], pairRole: parseInt(pairMatch[2]) as 1 | 2 })
         setRoute(null)
+        setShowModal(false)
+        return
+      }
+      setPairRoute(null)
+
+      // 2. Check for pad mode: /s/PADID or /s/PADID/rw
+      const { padId, isEdit } = parseUrl(window.location.pathname)
+      if (padId) {
+        setRoute({ padId, isEdit })
+        setShowModal(false)
         return
       }
 
-      setRoute({ padId, isEdit, remotePadId })
-      setShowModal(false)
+      // 3. Home
+      setShowModal(true)
+      setRoute(null)
     }
 
     // Initial check
-    handleHashChange()
+    handleRouteChange()
 
-    // Listen for hash changes
-    window.addEventListener('hashchange', handleHashChange)
+    // Listen for navigation changes
+    window.addEventListener('popstate', handleRouteChange)
     return () => {
-      window.removeEventListener('hashchange', handleHashChange)
+      window.removeEventListener('popstate', handleRouteChange)
     }
   }, [])
 
-  // SessionStartModal updates window.location.hash before calling this callback,
-  // so the hashchange event will update route state. We just close the modal here.
   const handleSessionStarted = () => {
     setShowModal(false)
+  }
+
+  if (pairRoute) {
+    return <SplitPadPage pairCode={pairRoute.pairCode} pairRole={pairRoute.pairRole} />
   }
 
   if (showModal) {
@@ -48,10 +63,6 @@ function App() {
         <div className="text-white">Loading...</div>
       </div>
     )
-  }
-
-  if (route.remotePadId) {
-    return <SplitPadPage padId={route.padId} remotePadId={route.remotePadId} />
   }
 
   return <PadPage padId={route.padId} isEdit={route.isEdit} />

@@ -1,6 +1,8 @@
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure'
+import { sha256 } from '@noble/hashes/sha256'
+import { utf8ToBytes } from '@noble/hashes/utils'
 import { encode, encodeFixed } from './encoding'
-import { PAD_ID_BYTES, PAD_ID_LENGTH } from './constants'
+import { PAD_ID_BYTES, PAD_ID_LENGTH, PAIR_CODE_ALPHABET, PAIR_CODE_LENGTH } from './constants'
 import { getDecryptedPrivateKey } from './sessionStorage'
 
 export interface PadKeys {
@@ -13,7 +15,6 @@ export interface PadKeys {
 export interface ParsedUrl {
   padId: string | null
   isEdit: boolean
-  remotePadId: string | null
 }
 
 /**
@@ -36,50 +37,15 @@ export function createNewPad(): PadKeys {
 }
 
 /**
- * Parse hash URL into padId, edit flag, and optional remotePadId
- * Formats: #padId, #padId:rw, or #padId:split:remotePadId
+ * Parse pathname into padId and edit flag
+ * Formats: /s/PADID (view-only), /s/PADID/rw (edit)
  */
-export function parseUrl(hash: string): ParsedUrl {
-  // Remove leading # if present
-  const cleanHash = hash.startsWith('#') ? hash.slice(1) : hash
-
-  if (!cleanHash) {
-    return { padId: null, isEdit: false, remotePadId: null }
+export function parseUrl(pathname: string): ParsedUrl {
+  const match = pathname.match(/^\/s\/([^/]+)(\/rw)?$/)
+  if (!match) {
+    return { padId: null, isEdit: false }
   }
-
-  const colonIndex = cleanHash.indexOf(':')
-
-  if (colonIndex === -1) {
-    // View-only URL: just padId
-    return { padId: cleanHash, isEdit: false, remotePadId: null }
-  }
-
-  // Check suffix after colon
-  const suffix = cleanHash.slice(colonIndex + 1)
-  const padId = cleanHash.slice(0, colonIndex)
-
-  if (suffix === 'rw') {
-    return { padId, isEdit: true, remotePadId: null }
-  }
-
-  // Split mode: padId:split:remotePadId
-  if (suffix.startsWith('split:')) {
-    const remotePadId = suffix.slice('split:'.length)
-    if (remotePadId.length === PAD_ID_LENGTH) {
-      return { padId, isEdit: true, remotePadId }
-    }
-    console.warn(`Invalid remotePadId length: ${remotePadId.length}, expected ${PAD_ID_LENGTH}`)
-    return { padId: null, isEdit: false, remotePadId: null }
-  }
-
-  if (suffix === '') {
-    // Trailing colon with no suffix: treat as view-only
-    return { padId, isEdit: false, remotePadId: null }
-  }
-
-  // Invalid suffix format
-  console.warn(`Invalid URL suffix ':${suffix}' - expected ':rw', ':split:remotePadId', or no suffix`)
-  return { padId: null, isEdit: false, remotePadId: null }
+  return { padId: match[1], isEdit: match[2] === '/rw' }
 }
 
 /**
@@ -127,11 +93,43 @@ export async function deriveKeys(padId: string, isEdit: boolean): Promise<{ secr
  * Generate URLs for sharing
  */
 export function generateShareUrls(padId: string): { viewerUrl: string, editorUrl: string } {
-  const base = window.location.origin + window.location.pathname
+  const origin = window.location.origin
   return {
-    viewerUrl: `${base}#${padId}`,
-    editorUrl: `${base}#${padId}:rw`
+    viewerUrl: `${origin}/s/${padId}`,
+    editorUrl: `${origin}/s/${padId}/rw`
   }
+}
+
+/**
+ * Generate a random pair code from the pair alphabet
+ */
+export function generatePairCode(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(PAIR_CODE_LENGTH))
+  return Array.from(bytes).map(b => PAIR_CODE_ALPHABET[b % PAIR_CODE_ALPHABET.length]).join('')
+}
+
+/**
+ * Derive deterministic keypairs for a pair session
+ * Each side gets its own secret key derived from sha256("nostrpad-pair:" + code + ":" + side)
+ */
+export function derivePairKeys(code: string, role: 1 | 2): {
+  localSecretKey: Uint8Array
+  localPublicKey: string
+  localPadId: string
+  remotePadId: string
+} {
+  const localSide = role
+  const remoteSide = role === 1 ? 2 : 1
+
+  const localSecretKey = sha256(utf8ToBytes(`nostrpad-pair:${code}:${localSide}`))
+  const localPublicKey = getPublicKey(localSecretKey)
+  const localPadId = encodeFixed(hexToBytes(localPublicKey).slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
+
+  const remoteSecretKey = sha256(utf8ToBytes(`nostrpad-pair:${code}:${remoteSide}`))
+  const remotePublicKey = getPublicKey(remoteSecretKey)
+  const remotePadId = encodeFixed(hexToBytes(remotePublicKey).slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
+
+  return { localSecretKey, localPublicKey, localPadId, remotePadId }
 }
 
 // Helper functions
