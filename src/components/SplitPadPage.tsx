@@ -53,11 +53,12 @@ export function SplitPadPage({ padId }: SplitPadPageProps) {
     isBlocked: isMultiTabBlocked || isLoading || !!loadError
   })
 
-  // Remote pad (view-only)
+  // Remote pad (view-only) — blocked until pair session is resolved
   const remote = useNostrPad({
     padId: pairKeys?.remotePadId ?? '',
     publicKey: '',
-    secretKey: null
+    secretKey: null,
+    isBlocked: !pairKeys || !!loadError
   })
 
   // Single-tab editor enforcement for local pad

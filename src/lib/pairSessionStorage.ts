@@ -312,8 +312,15 @@ export async function getDecryptedPairSession(localPadId: string): Promise<{ loc
   if (!result) return null
 
   try {
-    const { localSecretKey, localPublicKey } = await derivePairKeys(result.hmacKey, session.pairCode, session.role)
-    return { localSecretKey, localPublicKey, remotePadId: session.remotePadId, pairCode: session.pairCode }
+    const derived = await derivePairKeys(result.hmacKey, session.pairCode, session.role)
+
+    if (derived.localPadId !== localPadId || derived.remotePadId !== session.remotePadId) {
+      console.error('Pair session pad ID mismatch — clearing corrupt entry')
+      await clearPairSession(localPadId)
+      return null
+    }
+
+    return { localSecretKey: derived.localSecretKey, localPublicKey: derived.localPublicKey, remotePadId: session.remotePadId, pairCode: session.pairCode }
   } catch (error) {
     console.error('Failed to derive pair session keys:', error)
     return null

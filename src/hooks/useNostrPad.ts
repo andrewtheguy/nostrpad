@@ -114,6 +114,7 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
 
   // Initialize pool for editor mode (publish AND listen for logout)
   useEffect(() => {
+    if (!padId || isBlocked) return
     if (isDiscovering || activeRelays.length === 0) return
     if (!canEdit || !publicKey) return
 
@@ -175,10 +176,11 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
       sub.close()
       pool.close(activeRelays)
     }
-  }, [canEdit, activeRelays, isDiscovering, padId, publicKey, handleEvent])
+  }, [canEdit, activeRelays, isDiscovering, padId, publicKey, handleEvent, isBlocked])
 
   // Initialize pool and subscribe for view-only mode
   useEffect(() => {
+    if (!padId || isBlocked) return
     if (isDiscovering || activeRelays.length === 0) return
     if (canEdit) return
 
@@ -204,7 +206,7 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
       sub.close()
       pool.close(activeRelays)
     }
-  }, [canEdit, handleEvent, activeRelays, isDiscovering])
+  }, [canEdit, handleEvent, activeRelays, isDiscovering, padId, isBlocked])
 
   // Debounced content for publishing
   const debouncedContent = useDebounce(content, DEBOUNCE_MS)
