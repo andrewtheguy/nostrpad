@@ -5,6 +5,7 @@ import { useNostrPad } from '../hooks/useNostrPad'
 import { Header } from './Header'
 import { Editor } from './Editor'
 import { Footer } from './Footer'
+import { WaitingForPartner } from './pair/WaitingForPartner'
 
 interface SplitPadPageProps {
   pairCode: string
@@ -178,11 +179,15 @@ export function SplitPadPage({ pairCode }: SplitPadPageProps) {
           <div className="px-4 py-1 bg-blue-900/50 border-b border-gray-700 flex items-center gap-2">
             <span className="text-xs font-medium text-blue-400">Receive</span>
           </div>
-          <Editor
-            content={remote.content}
-            onChange={() => {}}
-            readOnly
-          />
+          {remote.hasReceivedEvent ? (
+            <Editor
+              content={remote.content}
+              onChange={() => {}}
+              readOnly
+            />
+          ) : (
+            <WaitingForPartner pairCode={pairCode} />
+          )}
         </div>
       </div>
       <Footer

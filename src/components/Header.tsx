@@ -24,6 +24,7 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoading
   const [showInfoModal, setShowInfoModal] = useState(false)
   const [showPairModal, setShowPairModal] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [copiedPairCode, setCopiedPairCode] = useState(false)
 
   const formatLastSaved = (date: Date | null) => {
     if (!date) return null
@@ -82,9 +83,22 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoading
             i
           </button>
           {isSplitMode && (
-            <span className="px-2 py-0.5 text-xs font-medium bg-purple-600 text-purple-100 rounded">
-              Pair{pairCode ? ` [${pairCode}]` : ''}
-            </span>
+            <button
+              onClick={async () => {
+                if (!pairCode) return
+                try {
+                  await navigator.clipboard.writeText(pairCode)
+                  setCopiedPairCode(true)
+                  setTimeout(() => setCopiedPairCode(false), 1500)
+                } catch (err) {
+                  console.error('Failed to copy pair code:', err)
+                }
+              }}
+              className="px-2 py-0.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-purple-100 rounded transition-colors cursor-pointer"
+              title={copiedPairCode ? 'Copied!' : 'Click to copy pair code'}
+            >
+              {copiedPairCode ? 'Copied!' : `Pair${pairCode ? ` [${pairCode}]` : ''}`}
+            </button>
           )}
           {!canEdit && !isSplitMode && (
             <span className="px-2 py-0.5 text-xs font-medium bg-yellow-600 text-yellow-100 rounded">View Only</span>

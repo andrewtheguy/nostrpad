@@ -27,6 +27,7 @@ interface UseNostrPadReturn {
   foundPublicKey: string | null
   isDiscovering: boolean
   isLoadingContent: boolean
+  hasReceivedEvent: boolean
 }
 
 export function useNostrPad({ padId, publicKey, secretKey, contentKey, sessionCreatedAt, onLogoutSignal, isBlocked = false }: UseNostrPadOptions): UseNostrPadReturn {
@@ -36,6 +37,7 @@ export function useNostrPad({ padId, publicKey, secretKey, contentKey, sessionCr
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [foundPublicKey, setFoundPublicKey] = useState<string | null>(publicKey || null)
   const [isLoadingContent, setIsLoadingContent] = useState(secretKey !== null)
+  const [hasReceivedEvent, setHasReceivedEvent] = useState(false)
 
   const poolRef = useRef<SimplePool | null>(null)
   const latestEventRef = useRef<Event | null>(null)
@@ -85,6 +87,7 @@ export function useNostrPad({ padId, publicKey, secretKey, contentKey, sessionCr
     if (contentKey) {
       decodePairPayload(event.content, contentKey).then(payload => {
         if (!payload) return
+        setHasReceivedEvent(true)
         if (payload.timestamp > latestTimestampRef.current) {
           latestEventRef.current = event
           latestTimestampRef.current = payload.timestamp
@@ -100,6 +103,8 @@ export function useNostrPad({ padId, publicKey, secretKey, contentKey, sessionCr
     // Sender/receiver mode: existing sync NIP-44 path
     const payload = decodePayload(event.content, padId)
     if (!payload) return
+
+    setHasReceivedEvent(true)
 
     // Only update if this is a newer event (compare embedded timestamps)
     if (payload.timestamp > latestTimestampRef.current) {
@@ -122,6 +127,7 @@ export function useNostrPad({ padId, publicKey, secretKey, contentKey, sessionCr
     setLastSaved(null)
     setIsSaving(false)
     setIsLoadingContent(canEdit) // true if edit mode (need to fetch), false otherwise
+    setHasReceivedEvent(false)
     latestEventRef.current = null
     latestTimestampRef.current = 0
     latestTextRef.current = ''
@@ -311,6 +317,7 @@ export function useNostrPad({ padId, publicKey, secretKey, contentKey, sessionCr
     lastSaved,
     foundPublicKey,
     isDiscovering,
-    isLoadingContent
+    isLoadingContent,
+    hasReceivedEvent
   }
 }
