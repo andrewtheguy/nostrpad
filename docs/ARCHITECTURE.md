@@ -371,6 +371,7 @@ For each event received:
 ### What's Protected
 
 - **Session secret keys**: Encrypted at rest in IndexedDB with non-extractable AES keys
+- **Pair mode root key**: Stored as a non-extractable HMAC-SHA256 CryptoKey in IndexedDB — raw bytes never enter JavaScript after initial import
 - **Content in transit**: NIP-44 encryption between client and relays
 
 ### What's NOT Protected
@@ -380,6 +381,34 @@ For each event received:
 - **Browser-level attacks**: XSS could access decrypted content in memory
 - **Session expiration**: There is no server-side session management or automatic expiration. Sessions persist indefinitely in IndexedDB until manually cleared.
 - **Physical access**: Anyone with access to the browser (same device, same browser profile) can resume an active session and gain full read/write access to the pad unless the session is cleared.
+
+### Data Safety When Derived Keys Are Compromised
+
+#### Pair mode — secret key safe even if derived nostr keys leak
+
+The pair secret key is the root HMAC key. Derived nostr keys are `HMAC-SHA256(secretKey, "nostrpad-pair:" + code + ":" + role)`. If an attacker obtains a derived key (e.g., from memory, a compromised environment, or a leaked nostr event signature):
+
+- **Secret key is NOT compromised.** HMAC is a one-way keyed function — knowing the output for one input does not reveal the key. There is no feasible way to reverse the HMAC to recover the root secret key.
+- **Other pair sessions are NOT compromised.** Each (pairCode, role) combination produces a cryptographically independent derived key. Knowing the derived key for one pair code gives zero information about derived keys for other pair codes.
+- **Attacker capability is limited to one pad.** With a leaked derived key they can sign nostr events for that single pad, but cannot create new pair sessions or impersonate the user on any other pair.
+
+In short: if someone runs the app in an untrusted environment and the derived nostr keys are extracted from memory, the root pair secret key (stored as a non-extractable CryptoKey) remains safe. The user can clear that pair session and create new ones without needing to rotate their secret key.
+
+#### Sender/receiver mode — at-rest data safe even if signing key leaks at runtime
+
+In sender/receiver mode, the nostr key IS the signing key (not derived from a root). It must exist as raw bytes in memory for `nostr-tools` signing (Web Crypto doesn't support secp256k1). However:
+
+- **At-rest protection holds.** The nostr key is encrypted in IndexedDB with a non-extractable AES-256-GCM CryptoKey. Even if the runtime environment leaks the decrypted key from memory, the AES wrapping key cannot be exported — an attacker who only has IndexedDB access (e.g., a backup, another app on the same origin) cannot decrypt the stored key without the CryptoKey object in the same browser session.
+- **No root key to protect.** Unlike pair mode there's no derivation hierarchy, so the signing key compromise IS the full compromise for that pad. This is inherent to the single-key-per-pad design.
+
+#### Summary
+
+| Scenario | Secret key safe? | Other sessions safe? |
+|----------|-----------------|---------------------|
+| Pair mode: derived key leaked | Yes (HMAC is one-way) | Yes (independent derivation per code) |
+| Pair mode: IndexedDB accessed without CryptoKey | Yes (non-extractable) | Yes |
+| Sender/receiver: signing key leaked at runtime | N/A (it IS the key) | N/A (single pad) |
+| Sender/receiver: IndexedDB accessed without CryptoKey | Yes (AES non-extractable) | N/A |
 
 ### Recommendations
 
