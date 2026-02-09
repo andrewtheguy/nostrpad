@@ -5,9 +5,10 @@ interface WaitingForPartnerProps {
 }
 
 export function WaitingForPartner({ pairCode }: WaitingForPartnerProps) {
-  const [copied, setCopied] = useState(false)
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const mountedRef = useRef(true)
+  const codeInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     return () => {
@@ -16,16 +17,25 @@ export function WaitingForPartner({ pairCode }: WaitingForPartnerProps) {
     }
   }, [])
 
+  const resetStatus = (delay: number) => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    timeoutRef.current = setTimeout(() => {
+      if (mountedRef.current) setCopyStatus('idle')
+    }, delay)
+  }
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(pairCode)
-      setCopied(true)
-      if (timeoutRef.current) clearTimeout(timeoutRef.current)
-      timeoutRef.current = setTimeout(() => {
-        if (mountedRef.current) setCopied(false)
-      }, 2000)
-    } catch (err) {
-      console.error('Failed to copy:', err)
+      setCopyStatus('copied')
+      resetStatus(2000)
+    } catch {
+      // Fallback: select the hidden input so the user can Ctrl+C / Cmd+C
+      if (codeInputRef.current) {
+        codeInputRef.current.select()
+      }
+      setCopyStatus('failed')
+      resetStatus(3000)
     }
   }
 
@@ -46,12 +56,28 @@ export function WaitingForPartner({ pairCode }: WaitingForPartnerProps) {
         <div className="inline-flex items-center gap-3 bg-gray-800 rounded-lg px-6 py-3 mb-3">
           <code className="text-2xl font-mono text-purple-300 tracking-widest">{pairCode}</code>
           <button
+            type="button"
             onClick={handleCopy}
             className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm transition-colors"
           >
-            {copied ? 'Copied!' : 'Copy'}
+            {copyStatus === 'copied' ? 'Copied!' : copyStatus === 'failed' ? 'Select & copy' : 'Copy'}
           </button>
         </div>
+
+        {/* Hidden selectable input as clipboard fallback */}
+        {copyStatus === 'failed' && (
+          <div className="mb-2">
+            <input
+              ref={codeInputRef}
+              type="text"
+              readOnly
+              value={pairCode}
+              className="px-3 py-1 bg-gray-700 text-purple-300 font-mono text-center rounded text-sm w-40 select-all focus:outline-none focus:ring-2 focus:ring-purple-500"
+              onFocus={(e) => e.target.select()}
+            />
+            <p className="text-yellow-400 text-xs mt-1">Copy failed — select the code above and copy manually</p>
+          </div>
+        )}
 
         <p className="text-gray-500 text-sm">Share this code with your partner</p>
       </div>

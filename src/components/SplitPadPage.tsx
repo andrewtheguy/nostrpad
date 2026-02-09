@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { getDecryptedPairSession } from '../lib/pairSessionStorage'
 import { navigateTo } from '../lib/navigation'
 import { useNostrPad } from '../hooks/useNostrPad'
@@ -95,6 +95,15 @@ export function SplitPadPage({ pairCode }: SplitPadPageProps) {
 
   const [pasteStatus, setPasteStatus] = useState<'idle' | 'pasted' | 'empty'>('idle')
   const [sendReadOnly, setSendReadOnly] = useState(false)
+  const pasteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+      if (pasteTimeoutRef.current) clearTimeout(pasteTimeoutRef.current)
+    }
+  }, [])
 
   const handleClearContent = () => {
     local.setContent('')
@@ -106,17 +115,26 @@ export function SplitPadPage({ pairCode }: SplitPadPageProps) {
       const text = await navigator.clipboard.readText()
       if (!text) {
         setPasteStatus('empty')
-        setTimeout(() => setPasteStatus('idle'), 1500)
+        if (pasteTimeoutRef.current) clearTimeout(pasteTimeoutRef.current)
+        pasteTimeoutRef.current = setTimeout(() => {
+          if (mountedRef.current) setPasteStatus('idle')
+        }, 1500)
         return
       }
       local.setContent(text)
       setSendReadOnly(true)
       setPasteStatus('pasted')
-      setTimeout(() => setPasteStatus('idle'), 1000)
+      if (pasteTimeoutRef.current) clearTimeout(pasteTimeoutRef.current)
+      pasteTimeoutRef.current = setTimeout(() => {
+        if (mountedRef.current) setPasteStatus('idle')
+      }, 1000)
     } catch (error) {
       console.error('Failed to read clipboard:', error)
       setPasteStatus('empty')
-      setTimeout(() => setPasteStatus('idle'), 1500)
+      if (pasteTimeoutRef.current) clearTimeout(pasteTimeoutRef.current)
+      pasteTimeoutRef.current = setTimeout(() => {
+        if (mountedRef.current) setPasteStatus('idle')
+      }, 1500)
     }
   }, [local])
 
