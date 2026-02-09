@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { getDecryptedPairSession } from '../lib/pairSessionStorage'
 import { navigateTo } from '../lib/navigation'
 import { useNostrPad } from '../hooks/useNostrPad'
@@ -112,9 +112,40 @@ export function SplitPadPage({ pairCode }: SplitPadPageProps) {
     navigateTo('/')
   }
 
+  const [copiedRemote, setCopiedRemote] = useState(false)
+  const [pasteStatus, setPasteStatus] = useState<'idle' | 'pasted' | 'empty'>('idle')
+
   const handleClearContent = () => {
     local.setContent('')
   }
+
+  const handlePaste = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText()
+      if (!text) {
+        setPasteStatus('empty')
+        setTimeout(() => setPasteStatus('idle'), 1500)
+        return
+      }
+      local.setContent(text)
+      setPasteStatus('pasted')
+      setTimeout(() => setPasteStatus('idle'), 1000)
+    } catch (error) {
+      console.error('Failed to read clipboard:', error)
+      setPasteStatus('empty')
+      setTimeout(() => setPasteStatus('idle'), 1500)
+    }
+  }, [local])
+
+  const handleCopyRemote = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(remote.content)
+      setCopiedRemote(true)
+      setTimeout(() => setCopiedRemote(false), 1000)
+    } catch (error) {
+      console.error('Failed to copy:', error)
+    }
+  }, [remote.content])
 
   if (isLoading) {
     return (
@@ -179,8 +210,6 @@ export function SplitPadPage({ pairCode }: SplitPadPageProps) {
         isLoadingContent={local.isLoadingContent}
         isSplitMode
         pairCode={pairKeys?.pairCode}
-        onClearContent={handleClearContent}
-        remoteContent={remote.content}
       />
       <div className="flex-1 flex flex-col sm:flex-row min-h-0">
         {/* Send pane (local, editable) */}
@@ -190,6 +219,21 @@ export function SplitPadPage({ pairCode }: SplitPadPageProps) {
             {pairKeys?.localPadId && (
               <span className="text-xs font-mono text-green-300/70">{pairKeys.localPadId} · {getDeviceLabel()}</span>
             )}
+            <span className="flex-1" />
+            <button
+              onClick={handlePaste}
+              className="px-2 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors"
+              title="Replace content with clipboard"
+            >
+              {pasteStatus === 'pasted' ? 'Pasted!' : pasteStatus === 'empty' ? 'Clipboard empty' : 'Paste'}
+            </button>
+            <button
+              onClick={handleClearContent}
+              className="px-2 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors"
+              title="Clear send pane"
+            >
+              Clear
+            </button>
           </div>
           <Editor
             content={local.content}
@@ -204,6 +248,14 @@ export function SplitPadPage({ pairCode }: SplitPadPageProps) {
             {pairKeys?.remotePadId && (
               <span className="text-xs font-mono text-blue-300/70">{pairKeys.remotePadId}</span>
             )}
+            <span className="flex-1" />
+            <button
+              onClick={handleCopyRemote}
+              className="px-2 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors"
+              title="Copy received content"
+            >
+              {copiedRemote ? 'Copied!' : 'Copy'}
+            </button>
           </div>
           {remote.hasReceivedEvent ? (
             <Editor

@@ -14,11 +14,9 @@ interface HeaderProps {
   isLoadingContent?: boolean
   isSplitMode?: boolean
   pairCode?: string
-  onClearContent?: () => void
-  remoteContent?: string
 }
 
-export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoadingContent, isSplitMode, pairCode, onClearContent, remoteContent }: HeaderProps) {
+export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoadingContent, isSplitMode, pairCode }: HeaderProps) {
   const [showShareModal, setShowShareModal] = useState(false)
   const [showInfoModal, setShowInfoModal] = useState(false)
   const [showPairModal, setShowPairModal] = useState(false)
@@ -36,8 +34,7 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoading
 
   const handleCopy = async () => {
     try {
-      const textToCopy = isSplitMode && remoteContent !== undefined ? remoteContent : content
-      await navigator.clipboard.writeText(textToCopy)
+      await navigator.clipboard.writeText(content)
       setCopied(true)
       setTimeout(() => setCopied(false), 1000)
     } catch (error) {
@@ -124,32 +121,25 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoading
               Saved {formatLastSaved(lastSaved)}
             </span>
           )}
-          <button
-            onClick={handleCopy}
-            className="px-2 py-1 text-xs sm:text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
-            title={copied ? 'Copied!' : isSplitMode ? 'Copy receive pane' : 'Copy content'}
-          >
-            <span className="sm:hidden">{copied ? '✓' : '📋'}</span>
-            <span className="hidden sm:inline">{copied ? '✓Copied' : 'Copy'}</span>
-          </button>
-          {isSplitMode ? (
-            <button
-              onClick={onClearContent}
-              className="px-2 py-1 text-xs sm:text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
-              title="Clear send pane"
-            >
-              <span className="sm:hidden">✕</span>
-              <span className="hidden sm:inline">Clear</span>
-            </button>
-          ) : (
-            <button
-              onClick={handleDownload}
-              className="px-2 py-1 text-xs sm:text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
-              title="Download content"
-            >
-              <span className="sm:hidden">⬇️</span>
-              <span className="hidden sm:inline">Download</span>
-            </button>
+          {!isSplitMode && (
+            <>
+              <button
+                onClick={handleCopy}
+                className="px-2 py-1 text-xs sm:text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
+                title={copied ? 'Copied!' : 'Copy content'}
+              >
+                <span className="sm:hidden">{copied ? '✓' : '📋'}</span>
+                <span className="hidden sm:inline">{copied ? '✓Copied' : 'Copy'}</span>
+              </button>
+              <button
+                onClick={handleDownload}
+                className="px-2 py-1 text-xs sm:text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
+                title="Download content"
+              >
+                <span className="sm:hidden">⬇️</span>
+                <span className="hidden sm:inline">Download</span>
+              </button>
+            </>
           )}
           <button
             onClick={handleClearSession}
