@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getDecryptedPairSession } from '../lib/sessionStorage'
+import { getDecryptedPairSession } from '../lib/pairSessionStorage'
 import { navigateTo } from '../lib/navigation'
 import { useNostrPad } from '../hooks/useNostrPad'
 import { Header } from './Header'
@@ -16,6 +16,7 @@ export function SplitPadPage({ padId }: SplitPadPageProps) {
     localSecretKey: Uint8Array
     localPublicKey: string
     remotePadId: string
+    fingerprint: string
   } | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -149,6 +150,7 @@ export function SplitPadPage({ padId }: SplitPadPageProps) {
         content={local.content}
         isLoadingContent={local.isLoadingContent}
         isSplitMode
+        pairFingerprint={pairKeys?.fingerprint}
         onExitSplit={handleExitSplit}
         onClearContent={handleClearContent}
         remoteContent={remote.content}

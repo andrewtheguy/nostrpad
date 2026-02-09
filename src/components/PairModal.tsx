@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
-import { generatePairSecret, isValidPairSecret, derivePairKeys } from '../lib/keys'
-import { createPairSession } from '../lib/sessionStorage'
+import { generatePairSecret, isValidPairSecret, derivePairKeys, computePairFingerprint } from '../lib/keys'
+import { createPairSession } from '../lib/pairSessionStorage'
 import { navigateTo } from '../lib/navigation'
 import { ALPHABET, PAIR_SECRET_LENGTH } from '../lib/constants'
 
@@ -44,7 +44,8 @@ export function PairModal({ onClose }: PairModalProps) {
     setIsProcessing(true)
     try {
       const { localSecretKey, localPadId, remotePadId } = derivePairKeys(generatedSecret, 1)
-      await createPairSession(localPadId, localSecretKey, remotePadId)
+      const fingerprint = computePairFingerprint(generatedSecret)
+      await createPairSession(localPadId, localSecretKey, remotePadId, fingerprint)
       navigateTo('/p/' + localPadId)
       onClose()
     } catch (err) {
@@ -75,7 +76,8 @@ export function PairModal({ onClose }: PairModalProps) {
     setIsProcessing(true)
     try {
       const { localSecretKey, localPadId, remotePadId } = derivePairKeys(secret, 2)
-      await createPairSession(localPadId, localSecretKey, remotePadId)
+      const fingerprint = computePairFingerprint(secret)
+      await createPairSession(localPadId, localSecretKey, remotePadId, fingerprint)
       navigateTo('/p/' + localPadId)
       onClose()
     } catch (err) {

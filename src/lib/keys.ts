@@ -2,7 +2,7 @@ import { generateSecretKey, getPublicKey } from 'nostr-tools/pure'
 import { sha256 } from '@noble/hashes/sha256'
 import { utf8ToBytes } from '@noble/hashes/utils'
 import { encode, encodeFixed } from './encoding'
-import { PAD_ID_BYTES, PAD_ID_LENGTH, ALPHABET, PAIR_SECRET_DATA_LENGTH, PAIR_SECRET_LENGTH } from './constants'
+import { PAD_ID_BYTES, PAD_ID_LENGTH, ALPHABET, PAIR_SECRET_DATA_LENGTH, PAIR_SECRET_LENGTH, PAIR_FINGERPRINT_BYTES, PAIR_FINGERPRINT_LENGTH } from './constants'
 import { getDecryptedPrivateKey } from './sessionStorage'
 
 export interface PadKeys {
@@ -164,6 +164,15 @@ export function derivePairKeys(secret: string, role: 1 | 2): {
   const remotePadId = encodeFixed(hexToBytes(remotePublicKey).slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
 
   return { localSecretKey, localPublicKey, localPadId, remotePadId }
+}
+
+/**
+ * Compute a 6-char fingerprint from a pair secret for visual identification.
+ * Role-agnostic: same fingerprint regardless of which side you are.
+ */
+export function computePairFingerprint(secret: string): string {
+  const hash = sha256(utf8ToBytes('nostrpad-pair-fp:' + secret))
+  return encodeFixed(hash.slice(0, PAIR_FINGERPRINT_BYTES), PAIR_FINGERPRINT_LENGTH)
 }
 
 // Helper functions

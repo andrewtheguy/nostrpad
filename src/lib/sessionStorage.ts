@@ -1,7 +1,6 @@
 const DB_NAME = 'nostrpad-sessions'
-const DB_VERSION = 5
+const DB_VERSION = 4
 const STORE_NAME = 'sessions'
-const PAIR_STORE_NAME = 'pairSessions'
 const GLOBAL_KEY = 'current-session'
 
 let cachedDb: IDBDatabase | Promise<IDBDatabase> | null = null
@@ -93,11 +92,7 @@ export async function initDB(): Promise<IDBDatabase> {
       if (db.objectStoreNames.contains(STORE_NAME)) {
         db.deleteObjectStore(STORE_NAME)
       }
-      if (db.objectStoreNames.contains(PAIR_STORE_NAME)) {
-        db.deleteObjectStore(PAIR_STORE_NAME)
-      }
       db.createObjectStore(STORE_NAME)
-      db.createObjectStore(PAIR_STORE_NAME)
     }
   })
 
@@ -269,140 +264,6 @@ export async function clearSession(): Promise<void> {
 
   return new Promise((resolve, reject) => {
     const request = store.delete(GLOBAL_KEY)
-
-    const cleanup = () => {
-      transaction.oncomplete = null
-      transaction.onerror = null
-      transaction.onabort = null
-      request.onerror = null
-    }
-
-    transaction.oncomplete = () => {
-      cleanup()
-      resolve()
-    }
-
-    transaction.onerror = () => {
-      cleanup()
-      reject(transaction.error)
-    }
-
-    transaction.onabort = () => {
-      cleanup()
-      reject(new Error('Transaction aborted'))
-    }
-
-    request.onerror = () => {
-      cleanup()
-      reject(request.error)
-    }
-  })
-}
-
-// --- Pair Session Storage ---
-
-interface PairSessionData {
-  localPadId: string
-  remotePadId: string
-  encryptedLocalSecretKey: Uint8Array
-  aesKey: CryptoKey
-  iv: Uint8Array
-  createdAt: number
-  integrityTag: Uint8Array
-}
-
-export async function createPairSession(localPadId: string, localSecretKey: Uint8Array, remotePadId: string): Promise<void> {
-  const { encrypted, key, iv } = await encryptPrivateKey(localSecretKey)
-  const createdAt = Date.now()
-  const integrityTag = await computeIntegrityTag(localPadId, createdAt, iv, encrypted)
-
-  const db = await initDB()
-  const transaction = db.transaction([PAIR_STORE_NAME], 'readwrite')
-  const store = transaction.objectStore(PAIR_STORE_NAME)
-
-  const data: PairSessionData = {
-    localPadId,
-    remotePadId,
-    encryptedLocalSecretKey: encrypted,
-    aesKey: key,
-    iv,
-    createdAt,
-    integrityTag
-  }
-
-  return new Promise((resolve, reject) => {
-    const request = store.put(data, localPadId)
-
-    const cleanup = () => {
-      transaction.oncomplete = null
-      transaction.onerror = null
-      transaction.onabort = null
-      request.onerror = null
-    }
-
-    transaction.oncomplete = () => {
-      cleanup()
-      resolve()
-    }
-
-    transaction.onerror = () => {
-      cleanup()
-      reject(transaction.error)
-    }
-
-    transaction.onabort = () => {
-      cleanup()
-      reject(new Error('Transaction aborted'))
-    }
-
-    request.onerror = () => {
-      cleanup()
-      reject(request.error)
-    }
-  })
-}
-
-export async function getDecryptedPairSession(localPadId: string): Promise<{ localSecretKey: Uint8Array, localPublicKey: string, remotePadId: string } | null> {
-  const db = await initDB()
-  const transaction = db.transaction([PAIR_STORE_NAME], 'readonly')
-  const store = transaction.objectStore(PAIR_STORE_NAME)
-
-  const session: PairSessionData | undefined = await new Promise((resolve, reject) => {
-    const request = store.get(localPadId)
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error)
-  })
-
-  if (!session) return null
-
-  // Verify integrity
-  if (!session.integrityTag || !session.createdAt) return null
-  const computed = await computeIntegrityTag(session.localPadId, session.createdAt, session.iv, session.encryptedLocalSecretKey)
-  if (computed.length !== session.integrityTag.length) return null
-  let diff = 0
-  for (let i = 0; i < computed.length; i++) {
-    diff |= computed[i] ^ session.integrityTag[i]
-  }
-  if (diff !== 0) return null
-
-  try {
-    const localSecretKey = await decryptPrivateKey(session.encryptedLocalSecretKey, session.aesKey, session.iv)
-    const { getPublicKey } = await import('nostr-tools/pure')
-    const localPublicKey = getPublicKey(localSecretKey)
-    return { localSecretKey, localPublicKey, remotePadId: session.remotePadId }
-  } catch (error) {
-    console.error('Failed to decrypt pair session:', error)
-    return null
-  }
-}
-
-export async function clearPairSession(localPadId: string): Promise<void> {
-  const db = await initDB()
-  const transaction = db.transaction([PAIR_STORE_NAME], 'readwrite')
-  const store = transaction.objectStore(PAIR_STORE_NAME)
-
-  return new Promise((resolve, reject) => {
-    const request = store.delete(localPadId)
 
     const cleanup = () => {
       transaction.oncomplete = null

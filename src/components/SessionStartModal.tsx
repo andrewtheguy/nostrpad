@@ -9,6 +9,8 @@ import { createLogoutEvent, publishEvent } from '../lib/nostr'
 import { decode, encodeFixed } from '../lib/encoding'
 import { PAD_ID_BYTES, PAD_ID_LENGTH } from '../lib/constants'
 import { PairModal } from './PairModal'
+import { listPairSessions, clearPairSession } from '../lib/pairSessionStorage'
+import type { PairSessionMetadata } from '../lib/pairSessionStorage'
 
 // Helper function
 function hexToBytes(hex: string): Uint8Array {
@@ -53,6 +55,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
   const [lastSessionCreatedAt, setLastSessionCreatedAt] = useState<number>(0)
   const [sessionEndedByRemote, setSessionEndedByRemote] = useState(false)
   const [showPairModal, setShowPairModal] = useState(false)
+  const [pairSessions, setPairSessions] = useState<PairSessionMetadata[]>([])
 
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -68,6 +71,10 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     }).catch(error => {
       console.error('Failed to get stored session:', error)
     })
+  }, [])
+
+  useEffect(() => {
+    listPairSessions().then(setPairSessions).catch(console.error)
   }, [])
 
   // Listen for logout events while on this screen
@@ -419,6 +426,43 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
           >
             Pair Mode
           </button>
+          {pairSessions.length > 0 && (
+            <div className="pt-3 border-t border-gray-700">
+              <h3 className="text-sm font-medium text-gray-400 mb-2">Pair Sessions</h3>
+              <div className="space-y-2">
+                {pairSessions.map((ps) => (
+                  <div key={ps.localPadId} className="flex items-center justify-between bg-gray-700 rounded px-3 py-2">
+                    <div>
+                      <span className="text-sm font-mono text-purple-300">[{ps.fingerprint}]</span>
+                      <span className="text-xs text-gray-400 ml-2">
+                        {new Date(ps.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          navigateTo('/p/' + ps.localPadId)
+                          onSessionStarted()
+                        }}
+                        className="px-2 py-1 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
+                      >
+                        Resume
+                      </button>
+                      <button
+                        onClick={async () => {
+                          await clearPairSession(ps.localPadId)
+                          setPairSessions(prev => prev.filter(s => s.localPadId !== ps.localPadId))
+                        }}
+                        className="px-2 py-1 text-xs bg-gray-600 hover:bg-gray-500 text-gray-300 rounded transition-colors"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {lastSessionPadId && (
             <button
               onClick={handleClearSession}

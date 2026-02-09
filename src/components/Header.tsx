@@ -13,12 +13,13 @@ interface HeaderProps {
   content: string
   isLoadingContent?: boolean
   isSplitMode?: boolean
+  pairFingerprint?: string
   onExitSplit?: () => void
   onClearContent?: () => void
   remoteContent?: string
 }
 
-export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoadingContent, isSplitMode, onExitSplit, onClearContent, remoteContent }: HeaderProps) {
+export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoadingContent, isSplitMode, pairFingerprint, onExitSplit, onClearContent, remoteContent }: HeaderProps) {
   const [showShareModal, setShowShareModal] = useState(false)
   const [showInfoModal, setShowInfoModal] = useState(false)
   const [showPairModal, setShowPairModal] = useState(false)
@@ -82,7 +83,7 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoading
           </button>
           {isSplitMode && (
             <span className="px-2 py-0.5 text-xs font-medium bg-purple-600 text-purple-100 rounded">
-              Pair
+              Pair{pairFingerprint ? ` [${pairFingerprint}]` : ''}
             </span>
           )}
           {!canEdit && !isSplitMode && (

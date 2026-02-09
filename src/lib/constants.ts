@@ -30,3 +30,7 @@ export const ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwx
 export const PAIR_SECRET_DATA_LENGTH = 22
 export const PAIR_SECRET_CHECKSUM_LENGTH = 2
 export const PAIR_SECRET_LENGTH = 24
+
+// Pair fingerprint: sha256 prefix encoded to Base59 for visual identification
+export const PAIR_FINGERPRINT_BYTES = 4
+export const PAIR_FINGERPRINT_LENGTH = 6

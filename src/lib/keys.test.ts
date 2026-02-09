@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { computePairSecretChecksum, isValidPairSecret, generatePairSecret } from './keys'
-import { ALPHABET, PAIR_SECRET_LENGTH, PAIR_SECRET_DATA_LENGTH } from './constants'
+import { computePairSecretChecksum, isValidPairSecret, generatePairSecret, computePairFingerprint } from './keys'
+import { ALPHABET, PAIR_SECRET_LENGTH, PAIR_SECRET_DATA_LENGTH, PAIR_FINGERPRINT_LENGTH } from './constants'
 
 describe('computePairSecretChecksum', () => {
   it('returns 2 characters from ALPHABET', () => {
@@ -106,5 +106,40 @@ describe('isValidPairSecret', () => {
     }
 
     expect(detected).toBe(tested)
+  })
+})
+
+describe('computePairFingerprint', () => {
+  it('is deterministic: same secret produces same fingerprint', () => {
+    const secret = generatePairSecret()
+    const a = computePairFingerprint(secret)
+    const b = computePairFingerprint(secret)
+    expect(a).toBe(b)
+  })
+
+  it('returns exactly PAIR_FINGERPRINT_LENGTH (6) valid ALPHABET characters', () => {
+    for (let i = 0; i < 20; i++) {
+      const fp = computePairFingerprint(generatePairSecret())
+      expect(fp.length).toBe(PAIR_FINGERPRINT_LENGTH)
+      for (const ch of fp) {
+        expect(ALPHABET).toContain(ch)
+      }
+    }
+  })
+
+  it('is role-agnostic: fingerprint depends only on secret, not role', () => {
+    const secret = generatePairSecret()
+    const fp = computePairFingerprint(secret)
+    // Calling again with same secret gives same result (no role param)
+    expect(computePairFingerprint(secret)).toBe(fp)
+  })
+
+  it('produces different fingerprints for different secrets', () => {
+    const fps = new Set<string>()
+    for (let i = 0; i < 50; i++) {
+      fps.add(computePairFingerprint(generatePairSecret()))
+    }
+    // With 6 Base59 chars (59^6 ≈ 4.2e10 space), 50 random should all be unique
+    expect(fps.size).toBe(50)
   })
 })
