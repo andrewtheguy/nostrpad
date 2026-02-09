@@ -28,6 +28,7 @@ interface UseNostrPadReturn {
   isDiscovering: boolean
   isLoadingContent: boolean
   hasReceivedEvent: boolean
+  /** Only meaningful in view-only / receive mode. True after the initial EOSE (end of stored events) fires, indicating the subscription is live. Editor mode uses one-shot querySync instead. */
   isSubscriptionReady: boolean
 }
 
@@ -87,8 +88,10 @@ export function useNostrPad({ padId, publicKey, secretKey, contentKey, sessionCr
 
     // Pair mode (contentKey provided): async decryption
     if (contentKey) {
+      const eventPadId = padId
       decodePairPayload(event.content, contentKey).then(payload => {
         if (!payload) return
+        if (currentPadIdRef.current !== eventPadId) return
         setHasReceivedEvent(true)
         if (payload.timestamp > latestTimestampRef.current) {
           latestEventRef.current = event
@@ -98,7 +101,10 @@ export function useNostrPad({ padId, publicKey, secretKey, contentKey, sessionCr
             setContentState(payload.text)
           }
         }
-      }).catch(err => console.warn('Failed to decode pair payload:', err))
+      }).catch(err => {
+        if (currentPadIdRef.current !== eventPadId) return
+        console.warn('Failed to decode pair payload:', err)
+      })
       return
     }
 
