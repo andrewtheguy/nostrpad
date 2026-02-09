@@ -69,13 +69,13 @@ export function Footer({
         <div className="flex items-center gap-4">
           {isSplitMode && remoteContent !== undefined ? (
             <>
-              <span className="text-xs text-green-400">Send:</span>
+              <span className="text-xs text-green-400" title="Send">↑</span>
               <span className="text-xs font-mono text-gray-300">{formatCrc32(content)}</span>
               <span className={`text-xs font-mono ${getCountColor()}`}>
                 {characterCount.toLocaleString()}
               </span>
               <span className="text-xs text-gray-600">|</span>
-              <span className="text-xs text-blue-400">Recv:</span>
+              <span className="text-xs text-blue-400" title="Receive">↓</span>
               <span className="text-xs font-mono text-gray-300">{formatCrc32(remoteContent)}</span>
               <span className="text-xs font-mono text-gray-300">
                 {remoteContent.length.toLocaleString()}

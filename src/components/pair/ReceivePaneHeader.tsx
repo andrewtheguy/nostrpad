@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 
 interface ReceivePaneHeaderProps {
   remotePadId: string
@@ -7,12 +7,24 @@ interface ReceivePaneHeaderProps {
 
 export function ReceivePaneHeader({ remotePadId, remoteContent }: ReceivePaneHeaderProps) {
   const [copiedRemote, setCopiedRemote] = useState(false)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    }
+  }, [])
 
   const handleCopyRemote = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(remoteContent)
       setCopiedRemote(true)
-      setTimeout(() => setCopiedRemote(false), 1000)
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      timeoutRef.current = setTimeout(() => {
+        if (mountedRef.current) setCopiedRemote(false)
+      }, 1000)
     } catch (error) {
       console.error('Failed to copy:', error)
     }

@@ -1,4 +1,5 @@
 function getDeviceLabel(): string {
+  if (typeof navigator === 'undefined') return 'Unknown'
   const ua = navigator.userAgent
   let os = 'Unknown'
   if (/iPad/.test(ua)) os = 'iPad'

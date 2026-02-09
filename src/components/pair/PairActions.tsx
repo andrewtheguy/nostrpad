@@ -152,7 +152,7 @@ export function PairActions({ fingerprint, onSessionStarted, onClearKey, onBack 
       {/* Fingerprint + Clear Secret Key — preserved as-is */}
       <div className="pt-4 border-t border-gray-700">
         <p className="text-xs font-mono text-gray-400 mb-2">
-          Secret key fingerprint: {fingerprint.slice(0, 5)}-{fingerprint.slice(5)}
+          Secret key fingerprint: {fingerprint.length >= 5 ? `${fingerprint.slice(0, 5)}-${fingerprint.slice(5)}` : fingerprint || '—'}
         </p>
         <button
           onClick={handleClearSecretKey}

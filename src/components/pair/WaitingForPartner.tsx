@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 interface WaitingForPartnerProps {
   pairCode: string
@@ -6,12 +6,24 @@ interface WaitingForPartnerProps {
 
 export function WaitingForPartner({ pairCode }: WaitingForPartnerProps) {
   const [copied, setCopied] = useState(false)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    }
+  }, [])
 
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(pairCode)
       setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      timeoutRef.current = setTimeout(() => {
+        if (mountedRef.current) setCopied(false)
+      }, 2000)
     } catch (err) {
       console.error('Failed to copy:', err)
     }
