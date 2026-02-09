@@ -657,12 +657,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div className="bg-gray-800 rounded-lg p-8 max-w-lg w-full mx-4">
-          <h2 className="text-2xl font-bold text-white mb-2">Pair Mode</h2>
-          {pairFingerprint && (
-            <p className="text-xs font-mono text-gray-400 mb-4">
-              Key: {pairFingerprint.slice(0, 5)}-{pairFingerprint.slice(5)}
-            </p>
-          )}
+          <h2 className="text-2xl font-bold text-white mb-4">Pair Mode</h2>
 
           <div className="flex gap-2 mb-4">
             <button
@@ -781,6 +776,11 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
 
           {/* Clear secret key */}
           <div className="pt-4 mt-4 border-t border-gray-700">
+            {pairFingerprint && (
+              <p className="text-xs font-mono text-gray-400 mb-2">
+                Secret key fingerprint: {pairFingerprint.slice(0, 5)}-{pairFingerprint.slice(5)}
+              </p>
+            )}
             {pairError && !generatedCode && pairTab === 'create' && <p className="text-red-400 text-xs mb-2">{pairError}</p>}
             <button
               onClick={handleClearSecretKey}

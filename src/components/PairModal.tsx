@@ -111,12 +111,7 @@ export function PairModal({ onClose }: PairModalProps) {
         className="bg-gray-800 rounded-lg p-6 max-w-lg w-full mx-4 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-xl font-semibold text-white mb-2">Pair Mode</h2>
-        {fingerprint && (
-          <p className="text-xs font-mono text-gray-400 mb-4">
-            Key: {fingerprint.slice(0, 5)}-{fingerprint.slice(5)}
-          </p>
-        )}
+        <h2 className="text-xl font-semibold text-white mb-4">Pair Mode</h2>
 
         <div className="flex gap-2 mb-4">
           <button
@@ -192,6 +187,14 @@ export function PairModal({ onClose }: PairModalProps) {
             >
               {isProcessing ? 'Joining...' : 'Join'}
             </button>
+          </div>
+        )}
+
+        {fingerprint && (
+          <div className="pt-4 mt-4 border-t border-gray-700">
+            <p className="text-xs font-mono text-gray-400">
+              Secret key fingerprint: {fingerprint.slice(0, 5)}-{fingerprint.slice(5)}
+            </p>
           </div>
         )}
 
