@@ -1,10 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { getDecryptedPairSession } from '../lib/pairSessionStorage'
 import { navigateTo } from '../lib/navigation'
 import { useNostrPad } from '../hooks/useNostrPad'
-import { Header } from './Header'
+import { PairHeader } from './PairHeader'
 import { Editor } from './Editor'
 import { Footer } from './Footer'
+import { WaitingForPartner } from './pair/WaitingForPartner'
+import { SendPaneHeader } from './pair/SendPaneHeader'
+import { ReceivePaneHeader } from './pair/ReceivePaneHeader'
 
 interface SplitPadPageProps {
   pairCode: string
@@ -90,9 +93,51 @@ export function SplitPadPage({ pairCode }: SplitPadPageProps) {
     navigateTo('/')
   }
 
+  const [pasteStatus, setPasteStatus] = useState<'idle' | 'pasted' | 'empty'>('idle')
+  const [sendReadOnly, setSendReadOnly] = useState(false)
+  const pasteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+      if (pasteTimeoutRef.current) clearTimeout(pasteTimeoutRef.current)
+    }
+  }, [])
+
   const handleClearContent = () => {
     local.setContent('')
+    setSendReadOnly(false)
   }
+
+  const handlePaste = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText()
+      if (!text) {
+        setPasteStatus('empty')
+        if (pasteTimeoutRef.current) clearTimeout(pasteTimeoutRef.current)
+        pasteTimeoutRef.current = setTimeout(() => {
+          if (mountedRef.current) setPasteStatus('idle')
+        }, 1500)
+        return
+      }
+      local.setContent(text)
+      setSendReadOnly(true)
+      setPasteStatus('pasted')
+      if (pasteTimeoutRef.current) clearTimeout(pasteTimeoutRef.current)
+      pasteTimeoutRef.current = setTimeout(() => {
+        if (mountedRef.current) setPasteStatus('idle')
+      }, 1000)
+    } catch (error) {
+      console.error('Failed to read clipboard:', error)
+      setPasteStatus('empty')
+      if (pasteTimeoutRef.current) clearTimeout(pasteTimeoutRef.current)
+      pasteTimeoutRef.current = setTimeout(() => {
+        if (mountedRef.current) setPasteStatus('idle')
+      }, 1500)
+    }
+  }, [local])
+
 
   if (isLoading) {
     return (
@@ -148,41 +193,44 @@ export function SplitPadPage({ pairCode }: SplitPadPageProps) {
 
   return (
     <div className="h-screen bg-gray-900 flex flex-col">
-      <Header
+      <PairHeader
         isSaving={local.isSaving}
-        canEdit={local.canEdit}
         lastSaved={local.lastSaved}
-        padId={pairKeys?.localPadId ?? ''}
-        content={local.content}
+        pairCode={pairKeys?.pairCode ?? pairCode}
         isLoadingContent={local.isLoadingContent}
-        isSplitMode
-        pairCode={pairKeys?.pairCode}
-        onExitSplit={handleExitSplit}
-        onClearContent={handleClearContent}
-        remoteContent={remote.content}
       />
       <div className="flex-1 flex flex-col sm:flex-row min-h-0">
         {/* Send pane (local, editable) */}
         <div className="flex-1 flex flex-col min-h-0">
-          <div className="px-4 py-1 bg-green-900/50 border-b border-gray-700 flex items-center gap-2">
-            <span className="text-xs font-medium text-green-400">Send</span>
-          </div>
+          <SendPaneHeader
+            localPadId={pairKeys?.localPadId ?? ''}
+            onPaste={handlePaste}
+            onClear={handleClearContent}
+            pasteStatus={pasteStatus}
+            readOnly={sendReadOnly}
+            onReadOnlyChange={setSendReadOnly}
+          />
           <Editor
             content={local.content}
             onChange={local.setContent}
-            readOnly={!local.canEdit || local.isLoadingContent}
+            readOnly={!local.canEdit || local.isLoadingContent || sendReadOnly}
           />
         </div>
         {/* Receive pane (remote, read-only) */}
         <div className="flex-1 flex flex-col min-h-0 border-t sm:border-t-0 sm:border-l border-gray-700">
-          <div className="px-4 py-1 bg-blue-900/50 border-b border-gray-700 flex items-center gap-2">
-            <span className="text-xs font-medium text-blue-400">Receive</span>
-          </div>
-          <Editor
-            content={remote.content}
-            onChange={() => {}}
-            readOnly
+          <ReceivePaneHeader
+            remotePadId={pairKeys?.remotePadId ?? ''}
+            remoteContent={remote.content}
           />
+          {!remote.isSubscriptionReady && !remote.hasReceivedEvent ? (
+            <WaitingForPartner pairCode={pairCode} />
+          ) : (
+            <Editor
+              content={remote.content}
+              onChange={() => {}}
+              readOnly
+            />
+          )}
         </div>
       </div>
       <Footer

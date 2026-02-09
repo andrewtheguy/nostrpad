@@ -2,9 +2,10 @@ import { useEffect, useRef } from 'react'
 
 interface InfoModalProps {
   onClose: () => void
+  isSplitMode?: boolean
 }
 
-export function InfoModal({ onClose }: InfoModalProps) {
+export function InfoModal({ onClose, isSplitMode }: InfoModalProps) {
   const modalRef = useRef<HTMLDivElement | null>(null)
   const closeButtonRef = useRef<HTMLButtonElement | null>(null)
   const previouslyFocusedRef = useRef<HTMLElement | null>(null)
@@ -67,12 +68,15 @@ export function InfoModal({ onClose }: InfoModalProps) {
           NostrPad is designed for temporary sharing rather than long-term storage. Sessions and data are ephemeral and may be purged periodically. Always have a backup of your data that you want to keep elsewhere.
         </p>
         <h3 className="text-sm font-semibold text-white mb-2">Security</h3>
-        <p className="text-sm text-gray-300 mb-2">
-          <span className="text-gray-200 font-medium">Sender/Receiver mode:</span> Your secret key controls who can edit the pad (write access). The shared viewer URL allows anyone to read content — encryption protects against relay operators, not link holders.
-        </p>
-        <p className="text-sm text-gray-300 mb-6">
-          <span className="text-gray-200 font-medium">Pair mode:</span> The shared secret key protects both read and write access. The pair code URL alone cannot decrypt content.
-        </p>
+        {isSplitMode ? (
+          <p className="text-sm text-gray-300 mb-6">
+            The shared secret key protects both read and write access. The pair code URL alone cannot decrypt content.
+          </p>
+        ) : (
+          <p className="text-sm text-gray-300 mb-6">
+            Your secret key controls who can edit the pad (write access). The shared viewer URL allows anyone to read content — encryption protects against relay operators, not link holders.
+          </p>
+        )}
         <div className="flex justify-end">
           <button
             ref={closeButtonRef}

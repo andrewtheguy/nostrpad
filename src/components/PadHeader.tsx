@@ -1,29 +1,32 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { ShareModal } from './ShareModal'
 import { InfoModal } from './InfoModal'
 import { PairModal } from './PairModal'
-import { navigateTo } from '../lib/navigation'
 import { clearSession } from '../lib/sessionStorage'
 
-interface HeaderProps {
+interface PadHeaderProps {
   isSaving: boolean
   canEdit: boolean
   lastSaved: Date | null
   padId: string
   content: string
   isLoadingContent?: boolean
-  isSplitMode?: boolean
-  pairCode?: string
-  onExitSplit?: () => void
-  onClearContent?: () => void
-  remoteContent?: string
 }
 
-export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoadingContent, isSplitMode, pairCode, onExitSplit, onClearContent, remoteContent }: HeaderProps) {
+export function PadHeader({ isSaving, canEdit, lastSaved, padId, content, isLoadingContent }: PadHeaderProps) {
   const [showShareModal, setShowShareModal] = useState(false)
   const [showInfoModal, setShowInfoModal] = useState(false)
   const [showPairModal, setShowPairModal] = useState(false)
   const [copied, setCopied] = useState(false)
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+    }
+  }, [])
 
   const formatLastSaved = (date: Date | null) => {
     if (!date) return null
@@ -31,15 +34,17 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoading
   }
 
   const handleHome = () => {
-    navigateTo('/')
+    window.location.href = '/'
   }
 
   const handleCopy = async () => {
     try {
-      const textToCopy = isSplitMode && remoteContent !== undefined ? remoteContent : content
-      await navigator.clipboard.writeText(textToCopy)
+      await navigator.clipboard.writeText(content)
       setCopied(true)
-      setTimeout(() => setCopied(false), 1000)
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+      copyTimeoutRef.current = setTimeout(() => {
+        if (mountedRef.current) setCopied(false)
+      }, 1000)
     } catch (error) {
       console.error('Failed to copy:', error)
     }
@@ -81,12 +86,7 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoading
           >
             i
           </button>
-          {isSplitMode && (
-            <span className="px-2 py-0.5 text-xs font-medium bg-purple-600 text-purple-100 rounded">
-              Pair{pairCode ? ` [${pairCode}]` : ''}
-            </span>
-          )}
-          {!canEdit && !isSplitMode && (
+          {!canEdit && (
             <span className="px-2 py-0.5 text-xs font-medium bg-yellow-600 text-yellow-100 rounded">View Only</span>
           )}
           <button
@@ -114,30 +114,19 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoading
           <button
             onClick={handleCopy}
             className="px-2 py-1 text-xs sm:text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
-            title={copied ? 'Copied!' : isSplitMode ? 'Copy receive pane' : 'Copy content'}
+            title={copied ? 'Copied!' : 'Copy content'}
           >
             <span className="sm:hidden">{copied ? '✓' : '📋'}</span>
             <span className="hidden sm:inline">{copied ? '✓Copied' : 'Copy'}</span>
           </button>
-          {isSplitMode ? (
-            <button
-              onClick={onClearContent}
-              className="px-2 py-1 text-xs sm:text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
-              title="Clear send pane"
-            >
-              <span className="sm:hidden">✕</span>
-              <span className="hidden sm:inline">Clear</span>
-            </button>
-          ) : (
-            <button
-              onClick={handleDownload}
-              className="px-2 py-1 text-xs sm:text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
-              title="Download content"
-            >
-              <span className="sm:hidden">⬇️</span>
-              <span className="hidden sm:inline">Download</span>
-            </button>
-          )}
+          <button
+            onClick={handleDownload}
+            className="px-2 py-1 text-xs sm:text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
+            title="Download content"
+          >
+            <span className="sm:hidden">⬇️</span>
+            <span className="hidden sm:inline">Download</span>
+          </button>
           <button
             onClick={handleClearSession}
             className="px-2 py-1 text-xs sm:text-sm bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
@@ -146,31 +135,20 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoading
             <span className="sm:hidden">🗑️</span>
             <span className="hidden sm:inline">Clear Session</span>
           </button>
-          {isSplitMode ? (
+          {canEdit && (
             <button
-              onClick={onExitSplit}
+              onClick={() => setShowPairModal(true)}
               className="px-2 py-1 text-xs sm:text-sm bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
             >
-              Exit Split
+              Pair
             </button>
-          ) : (
-            <>
-              {canEdit && (
-                <button
-                  onClick={() => setShowPairModal(true)}
-                  className="px-2 py-1 text-xs sm:text-sm bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
-                >
-                  Pair
-                </button>
-              )}
-              <button
-                onClick={() => setShowShareModal(true)}
-                className="px-2 py-1 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
-              >
-                Share
-              </button>
-            </>
           )}
+          <button
+            onClick={() => setShowShareModal(true)}
+            className="px-2 py-1 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+          >
+            Share
+          </button>
         </div>
       </header>
 

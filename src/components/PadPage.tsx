@@ -3,7 +3,7 @@ import { deriveKeys } from '../lib/keys'
 import { navigateTo } from '../lib/navigation'
 import { useNostrPad } from '../hooks/useNostrPad'
 import { getVerifiedStoredSession, clearSession } from '../lib/sessionStorage'
-import { Header } from './Header'
+import { PadHeader } from './PadHeader'
 import { Editor } from './Editor'
 import { Footer } from './Footer'
 
@@ -275,7 +275,7 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
           </button>
         </div>
       )}
-      <Header
+      <PadHeader
         isSaving={isSaving}
         canEdit={canEdit}
         lastSaved={lastSaved}
