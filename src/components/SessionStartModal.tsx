@@ -61,6 +61,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
   const [pairJoinInput, setPairJoinInput] = useState('')
   const [pairError, setPairError] = useState('')
   const [isPairProcessing, setIsPairProcessing] = useState(false)
+  const [pairFingerprint, setPairFingerprint] = useState<string | null>(null)
 
   // Pair setup state
   const [pairSetupTab, setPairSetupTab] = useState<'generate' | 'import'>('generate')
@@ -140,6 +141,8 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     try {
       const hasKey = await hasPairSecretKey()
       if (hasKey) {
+        const result = await getPairSecretKey()
+        setPairFingerprint(result?.fingerprint ?? null)
         setMode('pair')
       } else {
         setMode('pair-setup')
@@ -305,6 +308,8 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
       await storePairSecretKey(sk)
       setGeneratedEncodedKey(null)
       setPairSessions(await listPairSessions())
+      const result = await getPairSecretKey()
+      setPairFingerprint(result?.fingerprint ?? null)
       setMode('pair')
     } catch (err) {
       console.error('Failed to store pair secret key:', err)
@@ -332,6 +337,8 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
       await storePairSecretKey(sk)
       setPairSetupImportInput('')
       setPairSessions(await listPairSessions())
+      const result = await getPairSecretKey()
+      setPairFingerprint(result?.fingerprint ?? null)
       setMode('pair')
     } catch (err) {
       console.error('Failed to import pair secret key:', err)
@@ -362,13 +369,13 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     if (!generatedCode || isPairProcessing) return
     setIsPairProcessing(true)
     try {
-      const sk = await getPairSecretKey()
-      if (!sk) {
+      const result = await getPairSecretKey()
+      if (!result) {
         setPairError('Secret key not found. Please set up your secret key first.')
         setIsPairProcessing(false)
         return
       }
-      const { localPadId, remotePadId } = await derivePairKeys(sk, generatedCode, 1)
+      const { localPadId, remotePadId } = await derivePairKeys(result.hmacKey, generatedCode, 1)
       await createPairSession(localPadId, remotePadId, generatedCode, 1)
       navigateTo('/p/' + localPadId)
       onSessionStarted()
@@ -396,13 +403,13 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     }
     setIsPairProcessing(true)
     try {
-      const sk = await getPairSecretKey()
-      if (!sk) {
+      const result = await getPairSecretKey()
+      if (!result) {
         setPairError('Secret key not found. Please set up your secret key first.')
         setIsPairProcessing(false)
         return
       }
-      const { localPadId, remotePadId } = await derivePairKeys(sk, code, 2)
+      const { localPadId, remotePadId } = await derivePairKeys(result.hmacKey, code, 2)
       await createPairSession(localPadId, remotePadId, code, 2)
       navigateTo('/p/' + localPadId)
       onSessionStarted()
@@ -650,7 +657,12 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div className="bg-gray-800 rounded-lg p-8 max-w-lg w-full mx-4">
-          <h2 className="text-2xl font-bold text-white mb-4">Pair Mode</h2>
+          <h2 className="text-2xl font-bold text-white mb-2">Pair Mode</h2>
+          {pairFingerprint && (
+            <p className="text-xs font-mono text-gray-400 mb-4">
+              Key: {pairFingerprint.slice(0, 5)}-{pairFingerprint.slice(5)}
+            </p>
+          )}
 
           <div className="flex gap-2 mb-4">
             <button

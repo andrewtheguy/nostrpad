@@ -15,7 +15,14 @@ export function PairModal({ onClose }: PairModalProps) {
   const [joinInput, setJoinInput] = useState('')
   const [error, setError] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
+  const [fingerprint, setFingerprint] = useState<string | null>(null)
   const joinInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    getPairSecretKey().then(result => {
+      setFingerprint(result?.fingerprint ?? null)
+    }).catch(console.error)
+  }, [])
 
   useEffect(() => {
     if (tab === 'join') {
@@ -43,13 +50,13 @@ export function PairModal({ onClose }: PairModalProps) {
     if (!generatedCode || isProcessing) return
     setIsProcessing(true)
     try {
-      const sk = await getPairSecretKey()
-      if (!sk) {
+      const result = await getPairSecretKey()
+      if (!result) {
         setError('Secret key not found. Please set up your secret key from the home screen.')
         setIsProcessing(false)
         return
       }
-      const { localPadId, remotePadId } = await derivePairKeys(sk, generatedCode, 1)
+      const { localPadId, remotePadId } = await derivePairKeys(result.hmacKey, generatedCode, 1)
       await createPairSession(localPadId, remotePadId, generatedCode, 1)
       navigateTo('/p/' + localPadId)
       onClose()
@@ -77,13 +84,13 @@ export function PairModal({ onClose }: PairModalProps) {
     }
     setIsProcessing(true)
     try {
-      const sk = await getPairSecretKey()
-      if (!sk) {
+      const result = await getPairSecretKey()
+      if (!result) {
         setError('Secret key not found. Please set up your secret key from the home screen.')
         setIsProcessing(false)
         return
       }
-      const { localPadId, remotePadId } = await derivePairKeys(sk, code, 2)
+      const { localPadId, remotePadId } = await derivePairKeys(result.hmacKey, code, 2)
       await createPairSession(localPadId, remotePadId, code, 2)
       navigateTo('/p/' + localPadId)
       onClose()
@@ -104,7 +111,12 @@ export function PairModal({ onClose }: PairModalProps) {
         className="bg-gray-800 rounded-lg p-6 max-w-lg w-full mx-4 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-xl font-semibold text-white mb-4">Pair Mode</h2>
+        <h2 className="text-xl font-semibold text-white mb-2">Pair Mode</h2>
+        {fingerprint && (
+          <p className="text-xs font-mono text-gray-400 mb-4">
+            Key: {fingerprint.slice(0, 5)}-{fingerprint.slice(5)}
+          </p>
+        )}
 
         <div className="flex gap-2 mb-4">
           <button

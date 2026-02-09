@@ -1,15 +1,22 @@
 import { derivePairKeys } from './keys'
+import { encodeFixed } from './encoding'
 
 const DB_NAME = 'nostrpad-pair-sessions'
-const DB_VERSION = 3
+const DB_VERSION = 4
 const SECRET_KEY_STORE = 'pairSecretKey'
 const SESSIONS_STORE = 'pairSessions'
+
+const FINGERPRINT_LABEL = 'nostrpad-pair-fingerprint'
+const FINGERPRINT_LENGTH = 11
+const FINGERPRINT_BYTES = 8
 
 let cachedDb: IDBDatabase | Promise<IDBDatabase> | null = null
 
 interface PairSecretKeyData {
-  hmacKey: CryptoKey  // non-extractable HMAC-SHA256
+  hmacKey: CryptoKey        // non-extractable HMAC-SHA256
+  fingerprint: string       // 11-char base59 string
   createdAt: number
+  integrityTag: Uint8Array  // SHA-256(fingerprint + createdAt)
 }
 
 interface PairSessionData {
@@ -64,6 +71,57 @@ async function initPairDB(): Promise<IDBDatabase> {
   return promise
 }
 
+async function computePairKeyFingerprint(hmacKey: CryptoKey): Promise<string> {
+  const encoder = new TextEncoder()
+  const signature = new Uint8Array(await crypto.subtle.sign('HMAC', hmacKey, encoder.encode(FINGERPRINT_LABEL)))
+  return encodeFixed(signature.slice(0, FINGERPRINT_BYTES), FINGERPRINT_LENGTH)
+}
+
+async function computePairIntegrityTag(fingerprint: string, createdAt: number): Promise<Uint8Array> {
+  const encoder = new TextEncoder()
+  const fingerprintBytes = encoder.encode(fingerprint)
+  const timestampBytes = new Uint8Array(8)
+  new DataView(timestampBytes.buffer).setBigInt64(0, BigInt(createdAt), false)
+
+  const combined = new Uint8Array(fingerprintBytes.length + timestampBytes.length)
+  combined.set(fingerprintBytes, 0)
+  combined.set(timestampBytes, fingerprintBytes.length)
+
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', combined))
+}
+
+function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) {
+    diff |= a[i] ^ b[i]
+  }
+  return diff === 0
+}
+
+function constantTimeStringEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  }
+  return diff === 0
+}
+
+async function verifyPairIntegrity(data: PairSecretKeyData): Promise<{ valid: boolean, fingerprint: string }> {
+  const recomputedFingerprint = await computePairKeyFingerprint(data.hmacKey)
+  if (!constantTimeStringEqual(recomputedFingerprint, data.fingerprint)) {
+    return { valid: false, fingerprint: '' }
+  }
+
+  const recomputedTag = await computePairIntegrityTag(data.fingerprint, data.createdAt)
+  if (!constantTimeEqual(recomputedTag, data.integrityTag)) {
+    return { valid: false, fingerprint: '' }
+  }
+
+  return { valid: true, fingerprint: recomputedFingerprint }
+}
+
 export async function storePairSecretKey(secretKey: Uint8Array): Promise<void> {
   const hmacKey = await crypto.subtle.importKey(
     'raw',
@@ -74,13 +132,20 @@ export async function storePairSecretKey(secretKey: Uint8Array): Promise<void> {
   )
   const createdAt = Date.now()
 
+  // Compute fingerprint + integrity tag BEFORE starting the transaction
+  // Safari strictly follows IndexedDB spec where transactions auto-commit when event loop yields
+  const fingerprint = await computePairKeyFingerprint(hmacKey)
+  const integrityTag = await computePairIntegrityTag(fingerprint, createdAt)
+
   const db = await initPairDB()
   const transaction = db.transaction([SECRET_KEY_STORE], 'readwrite')
   const store = transaction.objectStore(SECRET_KEY_STORE)
 
   const data: PairSecretKeyData = {
     hmacKey,
-    createdAt
+    fingerprint,
+    createdAt,
+    integrityTag
   }
 
   return new Promise((resolve, reject) => {
@@ -115,7 +180,7 @@ export async function storePairSecretKey(secretKey: Uint8Array): Promise<void> {
   })
 }
 
-export async function getPairSecretKey(): Promise<CryptoKey | null> {
+export async function getPairSecretKey(): Promise<{ hmacKey: CryptoKey, fingerprint: string } | null> {
   const db = await initPairDB()
   const transaction = db.transaction([SECRET_KEY_STORE], 'readonly')
   const store = transaction.objectStore(SECRET_KEY_STORE)
@@ -128,7 +193,10 @@ export async function getPairSecretKey(): Promise<CryptoKey | null> {
 
   if (!data) return null
 
-  return data.hmacKey
+  const { valid, fingerprint } = await verifyPairIntegrity(data)
+  if (!valid) return null
+
+  return { hmacKey: data.hmacKey, fingerprint }
 }
 
 export async function hasPairSecretKey(): Promise<boolean> {
@@ -240,11 +308,11 @@ export async function getDecryptedPairSession(localPadId: string): Promise<{ loc
 
   if (!session) return null
 
-  const hmacKey = await getPairSecretKey()
-  if (!hmacKey) return null
+  const result = await getPairSecretKey()
+  if (!result) return null
 
   try {
-    const { localSecretKey, localPublicKey } = await derivePairKeys(hmacKey, session.pairCode, session.role)
+    const { localSecretKey, localPublicKey } = await derivePairKeys(result.hmacKey, session.pairCode, session.role)
     return { localSecretKey, localPublicKey, remotePadId: session.remotePadId, pairCode: session.pairCode }
   } catch (error) {
     console.error('Failed to derive pair session keys:', error)
