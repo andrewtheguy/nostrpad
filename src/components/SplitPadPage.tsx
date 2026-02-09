@@ -7,6 +7,27 @@ import { Editor } from './Editor'
 import { Footer } from './Footer'
 import { WaitingForPartner } from './pair/WaitingForPartner'
 
+function getDeviceLabel(): string {
+  const ua = navigator.userAgent
+  let os = 'Unknown'
+  if (/iPad/.test(ua)) os = 'iPad'
+  else if (/iPhone/.test(ua)) os = 'iPhone'
+  else if (/Android/.test(ua)) os = 'Android'
+  else if (/Mac OS X/.test(ua)) os = 'macOS'
+  else if (/Windows/.test(ua)) os = 'Windows'
+  else if (/Linux/.test(ua)) os = 'Linux'
+  else if (/CrOS/.test(ua)) os = 'ChromeOS'
+
+  let browser = ''
+  if (/Edg\//.test(ua)) browser = 'Edge'
+  else if (/OPR\/|Opera/.test(ua)) browser = 'Opera'
+  else if (/Firefox\//.test(ua)) browser = 'Firefox'
+  else if (/Chrome\//.test(ua) && !/Edg\//.test(ua)) browser = 'Chrome'
+  else if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) browser = 'Safari'
+
+  return browser ? `${os}/${browser}` : os
+}
+
 interface SplitPadPageProps {
   pairCode: string
 }
@@ -167,7 +188,7 @@ export function SplitPadPage({ pairCode }: SplitPadPageProps) {
           <div className="px-4 py-1 bg-green-900/50 border-b border-gray-700 flex items-center gap-2">
             <span className="text-xs font-medium text-green-400">Send</span>
             {pairKeys?.localPadId && (
-              <span className="text-xs font-mono text-green-300/70">{pairKeys.localPadId}</span>
+              <span className="text-xs font-mono text-green-300/70">{pairKeys.localPadId} · {getDeviceLabel()}</span>
             )}
           </div>
           <Editor
