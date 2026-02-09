@@ -97,16 +97,16 @@ In both modes, the pad ID is a 12-character Base59 identifier derived from the f
 
 ### URL Routing
 
-Path-based routing with three route families:
+Hybrid routing: sender/receiver mode uses hash-based URLs (padId in fragment, never sent to the server), pair mode uses path-based URLs (pairCode alone cannot derive content keys).
 
 | URL Pattern | Mode | Description |
 |-------------|------|-------------|
-| `/s/<padId>` | View | Read-only sender/receiver pad |
-| `/s/<padId>/rw` | Edit | Edit mode, requires active session with matching secret key |
+| `/s#<padId>` | View | Read-only sender/receiver pad |
+| `/s#<padId>:rw` | Edit | Edit mode, requires active session with matching secret key |
 | `/p/<pairCode>` | Pair | Split-screen pair mode (send + receive panes) |
 | `/` | Start | Session management modal |
 
-The `App.tsx` component handles routing via `popstate` events and `navigation.ts` provides `navigateTo()` for programmatic path changes using `history.pushState`.
+The `App.tsx` component handles routing via `popstate` and `hashchange` events. For sender/receiver mode, `parseUrl(hash)` extracts the padId from `window.location.hash`. `navigation.ts` provides `navigateTo()` for programmatic URL changes using `history.pushState`.
 
 ### Session Storage
 
@@ -316,7 +316,7 @@ const conversationKey = sha256(`nostrpad:${padId}`)
 const encrypted = nip44Encrypt(JSON.stringify(payload), conversationKey)
 ```
 
-Since the padId is in the URL, anyone with the URL can decrypt content. This provides obfuscation from relay operators, not confidentiality.
+Since the padId is in the URL fragment, anyone with the URL can decrypt content. This provides obfuscation from relay operators, not confidentiality. The fragment is never sent to the hosting server, keeping the decryption key material client-side only.
 
 **Pair mode (AES-GCM with HKDF-derived keys):**
 
@@ -378,10 +378,10 @@ Properties of kind 30078:
 ### App.tsx
 
 Root component handling:
-- Path-based routing (`/s/`, `/p/`, `/`)
+- Hybrid routing: hash-based (`/s#`) for sender/receiver, path-based (`/p/`) for pair mode
 - Renders `SplitPadPage` for pair routes, `PadPage` for sender/receiver routes
 - Session modal display logic
-- Route state management via `popstate` events
+- Route state management via `popstate` and `hashchange` events
 
 ### SessionStartModal.tsx
 
@@ -537,13 +537,13 @@ For each event received:
 
 - **Session secret keys (sender/receiver)**: Encrypted at rest in IndexedDB with non-extractable AES keys
 - **Pair mode root key**: Stored as both a non-extractable HMAC-SHA256 CryptoKey and a non-extractable HKDF CryptoKey in IndexedDB — raw bytes never enter JavaScript after initial import
-- **Content on relays (sender/receiver)** (obfuscation only): NIP-44 encryption using `sha256("nostrpad:" + padId)`. This prevents casual reading by relay operators but is **not confidential** — anyone with the padId (which is in the URL) can derive the key and decrypt.
+- **Content on relays (sender/receiver)** (obfuscation only): NIP-44 encryption using `sha256("nostrpad:" + padId)`. This prevents casual reading by relay operators but is **not confidential** — anyone with the padId (which is in the URL fragment) can derive the key and decrypt. The padId is in the URL fragment (`/s#<padId>`), so it is never sent to the hosting server.
 - **Content on relays (pair mode)** (confidential): AES-GCM-256 with HKDF-derived non-extractable keys from the root secret. Only someone with the root secret key can derive the content encryption keys. The content keys are non-extractable CryptoKey objects — even with scripting access to IndexedDB, they cannot be exported. Knowing the pairCode, the URL, or even the derived signing keys is **not sufficient** to decrypt content.
 - **Pair mode signing/content key separation**: The derived nostr signing key (from HMAC) and the content encryption key (from HKDF) are independent. Leaking the signing key does not reveal the content key, and vice versa.
 
 ### What's NOT Protected
 
-- **Content confidentiality (sender/receiver only)**: Anyone with the padId can derive the decryption key (`sha256("nostrpad:" + padId)`) — the padId is in the URL. This does **not** apply to pair mode, where content keys require the root secret.
+- **Content confidentiality (sender/receiver only)**: Anyone with the padId can derive the decryption key (`sha256("nostrpad:" + padId)`) — the padId is in the URL fragment. This does **not** apply to pair mode, where content keys require the root secret.
 - **Metadata**: Relay operators can see pubkeys, timestamps, and event sizes in both modes. In pair mode, the pairCode is in the URL but does not reveal which relay events correspond to the session (that requires the HMAC key to derive the pubkeys).
 - **Browser-level attacks (both modes)**: XSS could access decrypted content in memory. In pair mode, XSS can also call `crypto.subtle.encrypt`/`decrypt` using the non-extractable content keys (they can't export the keys, but can use them while the page is compromised).
 - **Signing keys in memory (both modes)**: Nostr signing keys exist as raw `Uint8Array` in JavaScript memory at runtime (Web Crypto doesn't support secp256k1). In sender/receiver mode, the signing key also implicitly grants content decryption (via padId derivation). In pair mode, a leaked signing key does **not** grant content decryption (the HKDF-derived content key is separate and non-extractable), but it does enable **denial of service**: the attacker can publish a validly-signed replacement event (kind 30078 is replaceable per author+d-tag) with garbage content, destroying the legitimate content on relays. The attacker cannot inject content that the partner would read, since `decodePairPayload` rejects anything not encrypted with the correct AES-GCM content key.
@@ -584,7 +584,7 @@ However:
 
 ### Recommendations
 
-- **Sender/receiver mode**: Treat pad URLs as semi-public — sharing the URL shares read access (the padId in the URL is sufficient to derive the decryption key)
+- **Sender/receiver mode**: Treat pad URLs as semi-public — sharing the URL shares read access (the padId in the URL fragment is sufficient to derive the decryption key). The padId is never sent to the hosting server (URL fragments are client-side only).
 - **Pair mode**: URLs (`/p/<pairCode>`) do not grant read access — the pairCode alone cannot derive content keys without the root secret. However, treat the root secret key as the trust boundary
 - Clear sessions when done on shared or public computers
 - Back up secret keys for important pads

@@ -35,15 +35,17 @@ export function createNewPad(): PadKeys {
 }
 
 /**
- * Parse pathname into padId and edit flag
- * Formats: /s/PADID (view-only), /s/PADID/rw (edit)
+ * Parse URL hash into padId and edit flag
+ * Formats: #PADID (view-only), #PADID:rw (edit)
+ * The hash keeps padId client-side only — fragments are never sent to the server.
  */
-export function parseUrl(pathname: string): ParsedUrl {
-  const match = pathname.match(/^\/s\/([^/]+)(\/rw)?$/)
-  if (!match) {
+export function parseUrl(hash: string): ParsedUrl {
+  if (!hash || !hash.startsWith('#')) {
     return { padId: null, isEdit: false }
   }
-  return { padId: match[1], isEdit: match[2] === '/rw' }
+  const match = hash.slice(1).match(/^([^:]+)(:rw)?$/)
+  if (!match) return { padId: null, isEdit: false }
+  return { padId: match[1], isEdit: match[2] === ':rw' }
 }
 
 /**
@@ -93,8 +95,8 @@ export async function deriveKeys(padId: string, isEdit: boolean): Promise<{ secr
 export function generateShareUrls(padId: string): { viewerUrl: string, editorUrl: string } {
   const origin = window.location.origin
   return {
-    viewerUrl: `${origin}/s/${padId}`,
-    editorUrl: `${origin}/s/${padId}/rw`
+    viewerUrl: `${origin}/s#${padId}`,
+    editorUrl: `${origin}/s#${padId}:rw`
   }
 }
 

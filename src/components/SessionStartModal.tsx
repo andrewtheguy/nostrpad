@@ -178,7 +178,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     setShowSecretError('')
     try {
       await createAndStoreSession(newPadData.padId, decode(newPadData.secret))
-      navigateTo('/s/' + newPadData.padId + '/rw')
+      navigateTo('/s#' + newPadData.padId + ':rw')
       onSessionStarted()
     } catch (error) {
       console.error('Failed to store session:', error)
@@ -228,7 +228,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
       const sessionTimestamp = (logoutEvent.created_at * 1000) + 1000
 
       await createAndStoreSession(padId, secretKey, sessionTimestamp)
-      navigateTo('/s/' + padId + '/rw')
+      navigateTo('/s#' + padId + ':rw')
       onSessionStarted()
     } catch (error) {
       console.error('Failed to import session:', error)
@@ -262,7 +262,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
         return
       }
 
-      navigateTo('/s/' + lastSessionPadId + '/rw')
+      navigateTo('/s#' + lastSessionPadId + ':rw')
       onSessionStarted()
     } catch (error) {
       console.error('Failed to validate session:', error)

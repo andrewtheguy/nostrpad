@@ -15,7 +15,7 @@ A simple shared notepad powered by Nostr relays. Create a pad, share the link, a
 - **Real-time Sync** - Content syncs across clients via Nostr relays with debounced publishing
 - **Editor/Viewer Modes** - Full editing for session owners, read-only view for shared links
 - **Pair Mode** - Share a secret key across devices, then create split-screen sessions with Send and Receive panes
-- **Encrypted Content** - NIP-44 encryption using a key derived from the pad ID
+- **Encrypted Content** - NIP-44 encryption (sender/receiver) and AES-GCM-256 with HKDF-derived keys (pair mode)
 - **Tamperproof Storage** - Integrity tags and fingerprints detect corruption in stored keys and sessions
 - **Decentralized** - No central server, data stored on Nostr relays
 - **CRC32 Checksum** - Verify content integrity at a glance
@@ -47,29 +47,37 @@ Try it out at [https://nostrpad.kuvi.app/](https://nostrpad.kuvi.app/)
 ## URL Structure
 
 ```
-/s/<padId>     -> View-only mode (shared with others)
-/s/<padId>/rw  -> Edit mode (requires active session)
-/p/<padId>     -> Pair mode (split-screen send/receive)
+/s#<padId>     -> View-only mode (shared with others)
+/s#<padId>:rw  -> Edit mode (requires active session)
+/p/<pairCode>  -> Pair mode (split-screen send/receive)
 /              -> Session start modal
 ```
 
-The pad ID is a 12-character Base59 identifier derived from the first 8 bytes of the public key.
+The pad ID is a 12-character Base59 identifier derived from the first 8 bytes of the public key. In sender/receiver mode, the padId is in the URL fragment (after `#`), which is never sent to the hosting server — keeping the decryption key material client-side only.
 
 ## Encryption & Privacy
 
 > **Do not store sensitive data.** NostrPad is designed for convenience, not security. Treat it as a semi-public scratchpad. Sessions never expire and anyone with access to your browser can resume your session unless it is cleared.
 
-Pad content is encrypted before publishing using NIP-44. The encryption key is deterministically
-derived from the `padId`, which means anyone with the view-only `#padId` link can decrypt and read
-the content. This design keeps URLs short and shareable, but it is **not** confidential against
-anyone who can guess or obtain the pad ID.
+**Sender/Receiver mode** — Content is encrypted using NIP-44 with a key derived from the padId
+(`sha256("nostrpad:" + padId)`). Anyone with the URL can decrypt the content. The padId is in
+the URL fragment (`/s#<padId>`), which is never sent to the hosting server — this keeps the
+decryption key material client-side only. This provides obfuscation from relay operators, not
+full confidentiality.
+
+**Pair mode** — Content is encrypted using AES-GCM-256 with keys derived from the root secret
+via HKDF. Content keys are non-extractable `CryptoKey` objects — even with scripting access to
+IndexedDB, they cannot be exported. The signing keys (derived via HMAC) and content keys
+(derived via HKDF) are independent: leaking a signing key does not reveal the content key.
+The pairCode in the URL (`/p/<pairCode>`) cannot derive content keys without the root secret.
 
 Session secret keys are stored encrypted in IndexedDB using AES-GCM with non-extractable keys,
 providing protection against casual access while the browser is open.
 
-In Pair Mode, the root secret key is stored as a non-extractable HMAC-SHA256 CryptoKey — the raw
-bytes never re-enter JavaScript after import. Derived keys for each pair session are independent,
-so compromising one derived key does not affect the root key or other sessions.
+In Pair Mode, the root secret key is stored as both a non-extractable HMAC-SHA256 CryptoKey
+(for signing key derivation) and a non-extractable HKDF CryptoKey (for content key derivation)
+— the raw bytes never re-enter JavaScript after import. Derived keys for each pair session are
+independent, so compromising one derived key does not affect the root key or other sessions.
 
 ## Tech Stack
 

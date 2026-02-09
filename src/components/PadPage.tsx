@@ -40,7 +40,7 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
 
     alert('Session invalidated: This pad was opened in editor mode on another device.')
     await clearSession()
-    navigateTo('/s/' + padId)
+    navigateTo('/s#' + padId)
     window.location.reload()
   }, [padId, keys?.sessionCreatedAt])
 
@@ -144,7 +144,7 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
   }, [padId, isEdit, loading])
 
   const handleSwitchToEditMode = () => {
-    navigateTo('/s/' + padId + '/rw')
+    navigateTo('/s#' + padId + ':rw')
   }
 
   const handleRetry = () => {
@@ -156,7 +156,7 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
 
   const handleViewOnly = () => {
     setEditModeFailed(false)
-    navigateTo('/s/' + padId)
+    navigateTo('/s#' + padId)
   }
 
   const handleGoHome = () => {
