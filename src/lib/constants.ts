@@ -27,4 +27,6 @@ export const ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwx
 
 // Pair code: lowercase base32 alphabet (excludes 0/1/i/l/o/u for non-ambiguity, includes - and _)
 export const PAIR_CODE_ALPHABET = '23456789abcdefghjkmnpqrstvwxyz-_'
-export const PAIR_CODE_LENGTH = 6
+export const PAIR_CODE_DATA_LENGTH = 8
+export const PAIR_CODE_CHECKSUM_LENGTH = 2
+export const PAIR_CODE_LENGTH = PAIR_CODE_DATA_LENGTH + PAIR_CODE_CHECKSUM_LENGTH

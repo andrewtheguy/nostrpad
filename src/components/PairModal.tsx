@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
-import { generatePairCode } from '../lib/keys'
+import { generatePairCode, validatePairCode } from '../lib/pairCode'
 import { navigateTo } from '../lib/navigation'
-import { PAIR_CODE_ALPHABET, PAIR_CODE_LENGTH } from '../lib/constants'
+import { PAIR_CODE_LENGTH } from '../lib/constants'
 
 interface PairModalProps {
   onClose: () => void
@@ -43,20 +43,11 @@ export function PairModal({ onClose }: PairModalProps) {
     onClose()
   }
 
-  const validateCode = (code: string): string | null => {
-    if (!code) return 'Please enter a pair code'
-    if (code.length !== PAIR_CODE_LENGTH) return `Code must be ${PAIR_CODE_LENGTH} characters (got ${code.length})`
-    for (const ch of code) {
-      if (!PAIR_CODE_ALPHABET.includes(ch)) return `Invalid character: "${ch}"`
-    }
-    return null
-  }
-
   const handleJoin = () => {
     const code = joinInput.trim().toLowerCase()
-    const validationError = validateCode(code)
-    if (validationError) {
-      setError(validationError)
+    const result = validatePairCode(code)
+    if (!result.valid) {
+      setError(result.error || 'Invalid code')
       return
     }
     navigateTo('/p/' + code + '/2')
