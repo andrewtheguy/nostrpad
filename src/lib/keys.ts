@@ -13,6 +13,7 @@ export interface PadKeys {
 export interface ParsedUrl {
   padId: string | null
   isEdit: boolean
+  remotePadId: string | null
 }
 
 /**
@@ -35,22 +36,22 @@ export function createNewPad(): PadKeys {
 }
 
 /**
- * Parse hash URL into padId and edit flag
- * Formats: #padId or #padId:rw
+ * Parse hash URL into padId, edit flag, and optional remotePadId
+ * Formats: #padId, #padId:rw, or #padId:split:remotePadId
  */
 export function parseUrl(hash: string): ParsedUrl {
   // Remove leading # if present
   const cleanHash = hash.startsWith('#') ? hash.slice(1) : hash
 
   if (!cleanHash) {
-    return { padId: null, isEdit: false }
+    return { padId: null, isEdit: false, remotePadId: null }
   }
 
   const colonIndex = cleanHash.indexOf(':')
 
   if (colonIndex === -1) {
     // View-only URL: just padId
-    return { padId: cleanHash, isEdit: false }
+    return { padId: cleanHash, isEdit: false, remotePadId: null }
   }
 
   // Check suffix after colon
@@ -58,17 +59,27 @@ export function parseUrl(hash: string): ParsedUrl {
   const padId = cleanHash.slice(0, colonIndex)
 
   if (suffix === 'rw') {
-    return { padId, isEdit: true }
+    return { padId, isEdit: true, remotePadId: null }
+  }
+
+  // Split mode: padId:split:remotePadId
+  if (suffix.startsWith('split:')) {
+    const remotePadId = suffix.slice('split:'.length)
+    if (remotePadId.length === PAD_ID_LENGTH) {
+      return { padId, isEdit: true, remotePadId }
+    }
+    console.warn(`Invalid remotePadId length: ${remotePadId.length}, expected ${PAD_ID_LENGTH}`)
+    return { padId: null, isEdit: false, remotePadId: null }
   }
 
   if (suffix === '') {
     // Trailing colon with no suffix: treat as view-only
-    return { padId, isEdit: false }
+    return { padId, isEdit: false, remotePadId: null }
   }
 
   // Invalid suffix format
-  console.warn(`Invalid URL suffix ':${suffix}' - expected ':rw' or no suffix`)
-  return { padId: null, isEdit: false }
+  console.warn(`Invalid URL suffix ':${suffix}' - expected ':rw', ':split:remotePadId', or no suffix`)
+  return { padId: null, isEdit: false, remotePadId: null }
 }
 
 /**

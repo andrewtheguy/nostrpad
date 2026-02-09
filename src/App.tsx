@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react'
 import { parseUrl } from './lib/keys'
 import { PadPage } from './components/PadPage'
+import { SplitPadPage } from './components/SplitPadPage'
 import { SessionStartModal } from './components/SessionStartModal'
 
 function App() {
-  const [route, setRoute] = useState<{ padId: string; isEdit: boolean } | null>(null)
+  const [route, setRoute] = useState<{ padId: string; isEdit: boolean; remotePadId: string | null } | null>(null)
   const [showModal, setShowModal] = useState(false)
 
   useEffect(() => {
     const handleHashChange = () => {
-      const { padId, isEdit } = parseUrl(window.location.hash)
+      const { padId, isEdit, remotePadId } = parseUrl(window.location.hash)
 
       if (!padId) {
         setShowModal(true)
@@ -17,7 +18,7 @@ function App() {
         return
       }
 
-      setRoute({ padId, isEdit })
+      setRoute({ padId, isEdit, remotePadId })
       setShowModal(false)
     }
 
@@ -47,6 +48,10 @@ function App() {
         <div className="text-white">Loading...</div>
       </div>
     )
+  }
+
+  if (route.remotePadId) {
+    return <SplitPadPage padId={route.padId} remotePadId={route.remotePadId} />
   }
 
   return <PadPage padId={route.padId} isEdit={route.isEdit} />
