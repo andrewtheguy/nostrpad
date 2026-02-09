@@ -1,7 +1,7 @@
 import { generatePairCode, isValidPairCode, derivePairKeys } from './keys'
 import { getPairSecretKey, createPairSession } from './pairSessionStorage'
 import { navigateTo } from './navigation'
-import { PAIR_CODE_LENGTH } from './constants'
+import { PAIR_CODE_LENGTH, PAIR_ROLE_INITIATOR, PAIR_ROLE_JOINER } from './constants'
 
 export function validatePairCode(code: string): string | null {
   if (!code) return 'Please enter a pair code'
@@ -16,8 +16,8 @@ export async function startNewPair(): Promise<string> {
     throw new Error('Secret key not found. Please set up your secret key first.')
   }
   const code = generatePairCode()
-  const { localPadId, remotePadId } = await derivePairKeys(result.hmacKey, code, 1)
-  await createPairSession(localPadId, remotePadId, code, 1)
+  const { localPadId, remotePadId } = await derivePairKeys(result.hmacKey, code, PAIR_ROLE_INITIATOR)
+  await createPairSession(localPadId, remotePadId, code, PAIR_ROLE_INITIATOR)
   try {
     await navigator.clipboard.writeText(code)
   } catch {
@@ -36,7 +36,7 @@ export async function joinExistingPair(code: string): Promise<void> {
   if (!result) {
     throw new Error('Secret key not found. Please set up your secret key first.')
   }
-  const { localPadId, remotePadId } = await derivePairKeys(result.hmacKey, code, 2)
-  await createPairSession(localPadId, remotePadId, code, 2)
+  const { localPadId, remotePadId } = await derivePairKeys(result.hmacKey, code, PAIR_ROLE_JOINER)
+  await createPairSession(localPadId, remotePadId, code, PAIR_ROLE_JOINER)
   navigateTo('/p/' + code)
 }

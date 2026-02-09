@@ -1,5 +1,6 @@
 import { derivePairKeys } from './keys'
 import { encodeFixed } from './encoding'
+import type { PairRole } from './constants'
 
 const DB_NAME = 'nostrpad-pair-sessions'
 const DB_VERSION = 5
@@ -24,7 +25,7 @@ interface PairSessionData {
   localPadId: string
   remotePadId: string
   pairCode: string
-  role: 1 | 2
+  role: PairRole
   createdAt: number
 }
 
@@ -256,7 +257,7 @@ export async function clearPairSecretKey(): Promise<void> {
   })
 }
 
-export async function createPairSession(localPadId: string, remotePadId: string, pairCode: string, role: 1 | 2): Promise<void> {
+export async function createPairSession(localPadId: string, remotePadId: string, pairCode: string, role: PairRole): Promise<void> {
   const createdAt = Date.now()
 
   const db = await initPairDB()

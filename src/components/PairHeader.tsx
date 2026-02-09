@@ -1,6 +1,5 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { InfoModal } from './InfoModal'
-import { navigateTo } from '../lib/navigation'
 import { clearPairSession } from '../lib/pairSessionStorage'
 
 interface PairHeaderProps {
@@ -12,7 +11,30 @@ interface PairHeaderProps {
 
 export function PairHeader({ isSaving, lastSaved, pairCode, isLoadingContent }: PairHeaderProps) {
   const [showInfoModal, setShowInfoModal] = useState(false)
-  const [copiedPairCode, setCopiedPairCode] = useState(false)
+  const [copiedPairCode, setCopiedPairCode] = useState<'idle' | 'copied' | 'failed'>('idle')
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+    }
+  }, [])
+
+  const handleCopyPairCode = async () => {
+    try {
+      await navigator.clipboard.writeText(pairCode)
+      setCopiedPairCode('copied')
+    } catch (err) {
+      console.error('Failed to copy pair code:', err)
+      setCopiedPairCode('failed')
+    }
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+    copyTimeoutRef.current = setTimeout(() => {
+      if (mountedRef.current) setCopiedPairCode('idle')
+    }, 1500)
+  }
 
   const formatLastSaved = (date: Date | null) => {
     if (!date) return null
@@ -20,7 +42,7 @@ export function PairHeader({ isSaving, lastSaved, pairCode, isLoadingContent }: 
   }
 
   const handleHome = () => {
-    navigateTo('/')
+    window.location.href = '/'
   }
 
   const handleClearSession = async () => {
@@ -50,24 +72,17 @@ export function PairHeader({ isSaving, lastSaved, pairCode, isLoadingContent }: 
             i
           </button>
           <button
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(pairCode)
-                setCopiedPairCode(true)
-                setTimeout(() => setCopiedPairCode(false), 1500)
-              } catch (err) {
-                console.error('Failed to copy pair code:', err)
-              }
-            }}
+            onClick={handleCopyPairCode}
             className="px-2 py-0.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-purple-100 rounded transition-colors cursor-pointer"
-            title={copiedPairCode ? 'Copied!' : 'Click to copy pair code'}
+            title={copiedPairCode === 'copied' ? 'Copied!' : copiedPairCode === 'failed' ? 'Copy failed' : 'Click to copy pair code'}
           >
-            {copiedPairCode ? 'Copied!' : `Pair [${pairCode}]`}
+            {copiedPairCode === 'copied' ? 'Copied!' : copiedPairCode === 'failed' ? 'Copy failed' : `Pair [${pairCode}]`}
           </button>
           <button
             onClick={handleHome}
             className="px-1.5 sm:px-2 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors"
             title="Home"
+            aria-label="Home"
           >
             <span className="sm:hidden">🏠</span>
             <span className="hidden sm:inline">Home</span>
@@ -90,6 +105,7 @@ export function PairHeader({ isSaving, lastSaved, pairCode, isLoadingContent }: 
             onClick={handleClearSession}
             className="px-2 py-1 text-xs sm:text-sm bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
             title="Clear session"
+            aria-label="Clear session"
           >
             <span className="sm:hidden">🗑️</span>
             <span className="hidden sm:inline">Clear Session</span>

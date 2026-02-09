@@ -25,6 +25,11 @@ export const MAX_CONTENT_LENGTH = 16000
 // Excludes 0, O, I, l, 1 for unambiguous characters
 export const ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz-_'
 
+// Pair roles
+export const PAIR_ROLE_INITIATOR = 1 as const
+export const PAIR_ROLE_JOINER = 2 as const
+export type PairRole = typeof PAIR_ROLE_INITIATOR | typeof PAIR_ROLE_JOINER
+
 // Pair code: 5 data chars + 1 checksum char = 6 total
 // Uses 29-char alphabet (prime) for short channel identifiers
 export const PAIR_CODE_ALPHABET = '23456789abcdefghjkmnpqrstvwxy'

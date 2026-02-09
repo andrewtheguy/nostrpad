@@ -1,6 +1,6 @@
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure'
 import { encode, encodeFixed } from './encoding'
-import { PAD_ID_BYTES, PAD_ID_LENGTH, PAIR_CODE_ALPHABET, PAIR_CODE_LENGTH, SECRET_KEY_ALPHABET, SECRET_KEY_DATA_LENGTH, SECRET_KEY_ENCODED_LENGTH } from './constants'
+import { PAD_ID_BYTES, PAD_ID_LENGTH, PAIR_CODE_ALPHABET, PAIR_CODE_LENGTH, SECRET_KEY_ALPHABET, SECRET_KEY_DATA_LENGTH, SECRET_KEY_ENCODED_LENGTH, type PairRole } from './constants'
 import { getDecryptedPrivateKey } from './sessionStorage'
 
 export interface PadKeys {
@@ -140,7 +140,7 @@ export function generatePairCode(): string {
  * Uses secretKey (non-extractable HMAC CryptoKey) + pairCode (6-char channel ID) + role to derive keys.
  * The root secret key never leaves Web Crypto — only derived keys are exposed as raw bytes.
  */
-export async function derivePairKeys(secretKey: CryptoKey, pairCode: string, role: 1 | 2): Promise<{
+export async function derivePairKeys(secretKey: CryptoKey, pairCode: string, role: PairRole): Promise<{
   localSecretKey: Uint8Array
   localPublicKey: string
   localPadId: string
