@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
-import { generatePairCode, isValidPairCode } from '../lib/keys'
+import { generatePairSecret, isValidPairSecret, derivePairKeys } from '../lib/keys'
+import { createPairSession } from '../lib/sessionStorage'
 import { navigateTo } from '../lib/navigation'
-import { PAIR_CODE_ALPHABET, PAIR_CODE_LENGTH } from '../lib/constants'
+import { ALPHABET, PAIR_SECRET_LENGTH } from '../lib/constants'
 
 interface PairModalProps {
   onClose: () => void
@@ -9,10 +10,11 @@ interface PairModalProps {
 
 export function PairModal({ onClose }: PairModalProps) {
   const [tab, setTab] = useState<'create' | 'join'>('create')
-  const [generatedCode, setGeneratedCode] = useState<string | null>(null)
-  const [copiedCode, setCopiedCode] = useState(false)
+  const [generatedSecret, setGeneratedSecret] = useState<string | null>(null)
+  const [copiedSecret, setCopiedSecret] = useState(false)
   const [joinInput, setJoinInput] = useState('')
   const [error, setError] = useState('')
+  const [isProcessing, setIsProcessing] = useState(false)
   const joinInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -22,46 +24,65 @@ export function PairModal({ onClose }: PairModalProps) {
   }, [tab])
 
   const handleGenerate = () => {
-    setGeneratedCode(generatePairCode())
-    setCopiedCode(false)
+    setGeneratedSecret(generatePairSecret())
+    setCopiedSecret(false)
   }
 
-  const handleCopyCode = async () => {
-    if (!generatedCode) return
+  const handleCopySecret = async () => {
+    if (!generatedSecret) return
     try {
-      await navigator.clipboard.writeText(generatedCode)
-      setCopiedCode(true)
-      setTimeout(() => setCopiedCode(false), 2000)
+      await navigator.clipboard.writeText(generatedSecret)
+      setCopiedSecret(true)
+      setTimeout(() => setCopiedSecret(false), 2000)
     } catch (err) {
       console.error('Failed to copy:', err)
     }
   }
 
-  const handleStartCreator = () => {
-    if (!generatedCode) return
-    navigateTo('/p/' + generatedCode + '/1')
-    onClose()
+  const handleStartCreator = async () => {
+    if (!generatedSecret || isProcessing) return
+    setIsProcessing(true)
+    try {
+      const { localSecretKey, localPadId, remotePadId } = derivePairKeys(generatedSecret, 1)
+      await createPairSession(localPadId, localSecretKey, remotePadId)
+      navigateTo('/p/' + localPadId)
+      onClose()
+    } catch (err) {
+      console.error('Failed to start pair session:', err)
+      setError('Failed to start pair session')
+      setIsProcessing(false)
+    }
   }
 
-  const validateCode = (code: string): string | null => {
-    if (!code) return 'Please enter a pair code'
-    if (code.length !== PAIR_CODE_LENGTH) return `Code must be ${PAIR_CODE_LENGTH} characters (got ${code.length})`
-    for (const ch of code) {
-      if (!PAIR_CODE_ALPHABET.includes(ch)) return `Invalid character: "${ch}"`
+  const validateSecret = (secret: string): string | null => {
+    if (!secret) return 'Please enter a pair key'
+    if (secret.length !== PAIR_SECRET_LENGTH) return `Key must be ${PAIR_SECRET_LENGTH} characters (got ${secret.length})`
+    for (const ch of secret) {
+      if (!ALPHABET.includes(ch)) return `Invalid character: "${ch}"`
     }
-    if (!isValidPairCode(code)) return 'Invalid code (checksum mismatch — check for typos)'
+    if (!isValidPairSecret(secret)) return 'Invalid key (checksum mismatch — check for typos)'
     return null
   }
 
-  const handleJoin = () => {
-    const code = joinInput.trim().toLowerCase()
-    const validationError = validateCode(code)
+  const handleJoin = async () => {
+    if (isProcessing) return
+    const secret = joinInput.trim()
+    const validationError = validateSecret(secret)
     if (validationError) {
       setError(validationError)
       return
     }
-    navigateTo('/p/' + code + '/2')
-    onClose()
+    setIsProcessing(true)
+    try {
+      const { localSecretKey, localPadId, remotePadId } = derivePairKeys(secret, 2)
+      await createPairSession(localPadId, localSecretKey, remotePadId)
+      navigateTo('/p/' + localPadId)
+      onClose()
+    } catch (err) {
+      console.error('Failed to join pair session:', err)
+      setError('Failed to join pair session')
+      setIsProcessing(false)
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -93,30 +114,32 @@ export function PairModal({ onClose }: PairModalProps) {
 
         {tab === 'create' && (
           <div className="space-y-4">
-            {!generatedCode ? (
+            {!generatedSecret ? (
               <button
                 onClick={handleGenerate}
                 className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-4 rounded transition-colors"
               >
-                Generate Code
+                Generate Key
               </button>
             ) : (
               <>
                 <div className="bg-gray-900 p-4 rounded flex items-center justify-between gap-2">
-                  <code className="text-2xl font-mono text-purple-300 tracking-widest">{generatedCode}</code>
+                  <code className="text-sm font-mono text-purple-300 break-all select-all">{generatedSecret}</code>
                   <button
-                    onClick={handleCopyCode}
-                    className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm transition-colors"
+                    onClick={handleCopySecret}
+                    className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm transition-colors shrink-0"
                   >
-                    {copiedCode ? 'Copied!' : 'Copy'}
+                    {copiedSecret ? 'Copied!' : 'Copy'}
                   </button>
                 </div>
-                <p className="text-gray-400 text-sm">Share this code with your partner, then click Start.</p>
+                <p className="text-gray-400 text-sm">Share this key with your partner, then click Start.</p>
+                {error && <p className="text-red-400 text-xs">{error}</p>}
                 <button
                   onClick={handleStartCreator}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded transition-colors"
+                  disabled={isProcessing}
+                  className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-800 disabled:text-green-400 text-white font-medium py-3 px-4 rounded transition-colors"
                 >
-                  Start
+                  {isProcessing ? 'Starting...' : 'Start'}
                 </button>
               </>
             )}
@@ -127,25 +150,26 @@ export function PairModal({ onClose }: PairModalProps) {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Enter pair code
+                Enter pair key
               </label>
               <input
                 ref={joinInputRef}
                 type="text"
                 value={joinInput}
-                onChange={(e) => { setJoinInput(e.target.value.toLowerCase()); setError('') }}
+                onChange={(e) => { setJoinInput(e.target.value); setError('') }}
                 onKeyDown={handleKeyDown}
-                placeholder={`${PAIR_CODE_LENGTH}-character code`}
-                className="w-full px-3 py-2 bg-gray-700 text-gray-100 rounded text-lg font-mono tracking-widest placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                maxLength={PAIR_CODE_LENGTH}
+                placeholder={`${PAIR_SECRET_LENGTH}-character key`}
+                className="w-full px-3 py-2 bg-gray-700 text-gray-100 rounded text-sm font-mono placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                maxLength={PAIR_SECRET_LENGTH}
               />
               {error && <p className="text-red-400 text-xs mt-1">{error}</p>}
             </div>
             <button
               onClick={handleJoin}
-              className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-4 rounded transition-colors"
+              disabled={isProcessing}
+              className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:text-purple-400 text-white font-medium py-3 px-4 rounded transition-colors"
             >
-              Join
+              {isProcessing ? 'Joining...' : 'Join'}
             </button>
           </div>
         )}

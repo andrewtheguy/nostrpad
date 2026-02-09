@@ -25,8 +25,8 @@ export const MAX_CONTENT_LENGTH = 16000
 // Excludes 0, O, I, l, 1 for unambiguous characters
 export const ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz-_'
 
-// Pair code: 29-char alphabet (prime, enables perfect checksum detection)
-// Excludes 0/1/i/l/o/u/z for non-ambiguity; 29 is prime so weighted checksum
-// catches all single-char substitutions and transpositions of different chars
-export const PAIR_CODE_ALPHABET = '23456789abcdefghjkmnpqrstvwxy'
-export const PAIR_CODE_LENGTH = 6
+// Pair secret: 22 data chars + 2 checksum chars = 24 total
+// Uses full ALPHABET (59 chars, prime) for ~129 bits entropy
+export const PAIR_SECRET_DATA_LENGTH = 22
+export const PAIR_SECRET_CHECKSUM_LENGTH = 2
+export const PAIR_SECRET_LENGTH = 24

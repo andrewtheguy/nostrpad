@@ -1,110 +1,110 @@
 import { describe, it, expect } from 'vitest'
-import { computePairChecksum, isValidPairCode, generatePairCode } from './keys'
-import { PAIR_CODE_ALPHABET, PAIR_CODE_LENGTH } from './constants'
+import { computePairSecretChecksum, isValidPairSecret, generatePairSecret } from './keys'
+import { ALPHABET, PAIR_SECRET_LENGTH, PAIR_SECRET_DATA_LENGTH } from './constants'
 
-describe('computePairChecksum', () => {
-  it('returns a character from the pair alphabet', () => {
-    const checksum = computePairChecksum('abcde')
-    expect(PAIR_CODE_ALPHABET).toContain(checksum)
+describe('computePairSecretChecksum', () => {
+  it('returns 2 characters from ALPHABET', () => {
+    const data = 'ABCDEFGHJKLMNPQRSTUVWXa'
+    const checksum = computePairSecretChecksum(data.slice(0, PAIR_SECRET_DATA_LENGTH))
+    expect(checksum.length).toBe(2)
+    for (const ch of checksum) {
+      expect(ALPHABET).toContain(ch)
+    }
   })
 
   it('is deterministic', () => {
-    const a = computePairChecksum('x9f3k')
-    const b = computePairChecksum('x9f3k')
+    const data = 'x9f3kABCDEFGHJKLMNPQRST'.slice(0, PAIR_SECRET_DATA_LENGTH)
+    const a = computePairSecretChecksum(data)
+    const b = computePairSecretChecksum(data)
     expect(a).toBe(b)
   })
 
   it('differs for different data', () => {
-    const a = computePairChecksum('abcde')
-    const b = computePairChecksum('abcdf')
+    const a = computePairSecretChecksum('ABCDEFGHJKLMNPQRSTUVWa')
+    const b = computePairSecretChecksum('ABCDEFGHJKLMNPQRSTUVWb')
     expect(a).not.toBe(b)
   })
 })
 
-describe('generatePairCode', () => {
-  it('returns a code of PAIR_CODE_LENGTH', () => {
-    const code = generatePairCode()
-    expect(code.length).toBe(PAIR_CODE_LENGTH)
+describe('generatePairSecret', () => {
+  it('returns a secret of PAIR_SECRET_LENGTH (24)', () => {
+    const secret = generatePairSecret()
+    expect(secret.length).toBe(PAIR_SECRET_LENGTH)
   })
 
-  it('only uses valid alphabet characters', () => {
+  it('only uses valid ALPHABET characters', () => {
     for (let i = 0; i < 50; i++) {
-      const code = generatePairCode()
-      for (const ch of code) {
-        expect(PAIR_CODE_ALPHABET).toContain(ch)
+      const secret = generatePairSecret()
+      for (const ch of secret) {
+        expect(ALPHABET).toContain(ch)
       }
     }
   })
 
   it('passes its own checksum validation', () => {
     for (let i = 0; i < 50; i++) {
-      expect(isValidPairCode(generatePairCode())).toBe(true)
+      expect(isValidPairSecret(generatePairSecret())).toBe(true)
     }
   })
 })
 
-describe('isValidPairCode', () => {
-  it('accepts valid generated codes', () => {
-    const code = generatePairCode()
-    expect(isValidPairCode(code)).toBe(true)
+describe('isValidPairSecret', () => {
+  it('accepts valid generated secrets', () => {
+    const secret = generatePairSecret()
+    expect(isValidPairSecret(secret)).toBe(true)
   })
 
   it('rejects wrong length', () => {
-    expect(isValidPairCode('abc')).toBe(false)
-    expect(isValidPairCode('abcdefgh')).toBe(false)
-    expect(isValidPairCode('')).toBe(false)
+    expect(isValidPairSecret('abc')).toBe(false)
+    expect(isValidPairSecret('ABCDEFGHJKLMNPQRSTUVWXYZabcde')).toBe(false)
+    expect(isValidPairSecret('')).toBe(false)
   })
 
   it('rejects invalid characters', () => {
-    expect(isValidPairCode('ABCDEF')).toBe(false)
-    expect(isValidPairCode('abc-de')).toBe(false)
-    expect(isValidPairCode('abc_de')).toBe(false)
-    expect(isValidPairCode('00000a')).toBe(false)
+    // Characters not in ALPHABET: 0, 1, I, O, l
+    const invalid = '0' + 'A'.repeat(PAIR_SECRET_LENGTH - 1)
+    expect(isValidPairSecret(invalid)).toBe(false)
   })
 
-  it('detects single-character substitution errors', () => {
+  it('detects all single-character substitution errors', () => {
     let detected = 0
     const trials = 100
 
     for (let t = 0; t < trials; t++) {
-      const code = generatePairCode()
-      // Pick a random position and change it to a different valid char
-      const pos = Math.floor(Math.random() * code.length)
-      const original = code[pos]
+      const secret = generatePairSecret()
+      const pos = Math.floor(Math.random() * secret.length)
+      const original = secret[pos]
       let replacement: string
       do {
-        replacement = PAIR_CODE_ALPHABET[Math.floor(Math.random() * PAIR_CODE_ALPHABET.length)]
+        replacement = ALPHABET[Math.floor(Math.random() * ALPHABET.length)]
       } while (replacement === original)
 
-      const corrupted = code.slice(0, pos) + replacement + code.slice(pos + 1)
-      if (!isValidPairCode(corrupted)) {
+      const corrupted = secret.slice(0, pos) + replacement + secret.slice(pos + 1)
+      if (!isValidPairSecret(corrupted)) {
         detected++
       }
     }
 
-    // A position-weighted checksum mod 30 catches all single-char substitutions
     expect(detected).toBe(trials)
   })
 
-  it('detects transposition errors of different characters', () => {
+  it('detects all transposition errors of different characters', () => {
     let detected = 0
     let tested = 0
     const trials = 200
 
     for (let t = 0; t < trials; t++) {
-      const code = generatePairCode()
-      // Pick two random adjacent positions
-      const pos = Math.floor(Math.random() * (code.length - 1))
-      if (code[pos] === code[pos + 1]) continue // skip if same chars (transposition is a no-op)
+      const secret = generatePairSecret()
+      const pos = Math.floor(Math.random() * (secret.length - 1))
+      if (secret[pos] === secret[pos + 1]) continue
 
       tested++
-      const transposed = code.slice(0, pos) + code[pos + 1] + code[pos] + code.slice(pos + 2)
-      if (!isValidPairCode(transposed)) {
+      const transposed = secret.slice(0, pos) + secret[pos + 1] + secret[pos] + secret.slice(pos + 2)
+      if (!isValidPairSecret(transposed)) {
         detected++
       }
     }
 
-    // Weighted checksum catches all transpositions of different characters
     expect(detected).toBe(tested)
   })
 })

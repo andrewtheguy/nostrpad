@@ -1,21 +1,20 @@
 import { useState, useEffect } from 'react'
 import { parseUrl } from './lib/keys'
-import { PAIR_CODE_LENGTH } from './lib/constants'
 import { PadPage } from './components/PadPage'
 import { SplitPadPage } from './components/SplitPadPage'
 import { SessionStartModal } from './components/SessionStartModal'
 
 function App() {
   const [route, setRoute] = useState<{ padId: string; isEdit: boolean } | null>(null)
-  const [pairRoute, setPairRoute] = useState<{ pairCode: string; pairRole: 1 | 2 } | null>(null)
+  const [pairRoute, setPairRoute] = useState<{ padId: string } | null>(null)
   const [showModal, setShowModal] = useState(false)
 
   useEffect(() => {
     const handleRouteChange = () => {
-      // 1. Check for pair mode: /p/CODE/1 or /p/CODE/2
-      const pairMatch = window.location.pathname.match(/^\/p\/([a-z0-9]+)\/([12])$/)
-      if (pairMatch && pairMatch[1].length === PAIR_CODE_LENGTH) {
-        setPairRoute({ pairCode: pairMatch[1], pairRole: parseInt(pairMatch[2]) as 1 | 2 })
+      // 1. Check for pair mode: /p/PADID
+      const pairMatch = window.location.pathname.match(/^\/p\/([^/]+)$/)
+      if (pairMatch) {
+        setPairRoute({ padId: pairMatch[1] })
         setRoute(null)
         setShowModal(false)
         return
@@ -50,7 +49,7 @@ function App() {
   }
 
   if (pairRoute) {
-    return <SplitPadPage pairCode={pairRoute.pairCode} pairRole={pairRoute.pairRole} />
+    return <SplitPadPage padId={pairRoute.padId} />
   }
 
   if (showModal) {

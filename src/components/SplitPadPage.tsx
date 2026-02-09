@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react'
-import { derivePairKeys } from '../lib/keys'
+import { useState, useEffect } from 'react'
+import { getDecryptedPairSession } from '../lib/sessionStorage'
 import { navigateTo } from '../lib/navigation'
 import { useNostrPad } from '../hooks/useNostrPad'
 import { Header } from './Header'
@@ -7,38 +7,63 @@ import { Editor } from './Editor'
 import { Footer } from './Footer'
 
 interface SplitPadPageProps {
-  pairCode: string
-  pairRole: 1 | 2
+  padId: string
 }
 
-export function SplitPadPage({ pairCode, pairRole }: SplitPadPageProps) {
+export function SplitPadPage({ padId }: SplitPadPageProps) {
   const [isMultiTabBlocked, setIsMultiTabBlocked] = useState(false)
+  const [pairKeys, setPairKeys] = useState<{
+    localSecretKey: Uint8Array
+    localPublicKey: string
+    remotePadId: string
+  } | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
-  const { localSecretKey, localPublicKey, localPadId, remotePadId } = useMemo(
-    () => derivePairKeys(pairCode, pairRole),
-    [pairCode, pairRole]
-  )
+  useEffect(() => {
+    let cancelled = false
+    async function loadSession() {
+      try {
+        const session = await getDecryptedPairSession(padId)
+        if (cancelled) return
+        if (!session) {
+          setLoadError('Pair session not found')
+          setIsLoading(false)
+          return
+        }
+        setPairKeys(session)
+        setIsLoading(false)
+      } catch (err) {
+        if (cancelled) return
+        console.error('Failed to load pair session:', err)
+        setLoadError('Failed to load pair session')
+        setIsLoading(false)
+      }
+    }
+    loadSession()
+    return () => { cancelled = true }
+  }, [padId])
 
   // Local pad (editable)
   const local = useNostrPad({
-    padId: localPadId,
-    publicKey: localPublicKey,
-    secretKey: localSecretKey,
-    isBlocked: isMultiTabBlocked
+    padId: padId,
+    publicKey: pairKeys?.localPublicKey ?? '',
+    secretKey: pairKeys?.localSecretKey ?? null,
+    isBlocked: isMultiTabBlocked || isLoading || !!loadError
   })
 
   // Remote pad (view-only)
   const remote = useNostrPad({
-    padId: remotePadId,
+    padId: pairKeys?.remotePadId ?? '',
     publicKey: '',
     secretKey: null
   })
 
   // Single-tab editor enforcement for local pad
   useEffect(() => {
-    if (!local.canEdit || !localPadId) return
+    if (!local.canEdit || !padId) return
 
-    const channelName = `nostrpad-editor-${localPadId}`
+    const channelName = `nostrpad-editor-${padId}`
     const channel = new BroadcastChannel(channelName)
 
     channel.postMessage('NEW_EDITOR')
@@ -52,7 +77,7 @@ export function SplitPadPage({ pairCode, pairRole }: SplitPadPageProps) {
     return () => {
       channel.close()
     }
-  }, [local.canEdit, localPadId])
+  }, [local.canEdit, padId])
 
   const handleExitSplit = () => {
     navigateTo('/')
@@ -60,6 +85,31 @@ export function SplitPadPage({ pairCode, pairRole }: SplitPadPageProps) {
 
   const handleClearContent = () => {
     local.setContent('')
+  }
+
+  if (isLoading) {
+    return (
+      <div className="h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-white">Loading pair session...</div>
+      </div>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <div className="h-screen bg-gray-900 flex items-center justify-center">
+        <div className="bg-gray-800 rounded-lg p-8 max-w-md w-full mx-4 shadow-xl border border-gray-700">
+          <h2 className="text-xl font-bold text-red-500 mb-4">Pair Session Error</h2>
+          <p className="text-gray-300 mb-6">{loadError}</p>
+          <button
+            onClick={handleExitSplit}
+            className="w-full bg-gray-700 hover:bg-gray-600 text-gray-300 font-medium py-2 px-4 rounded transition-colors"
+          >
+            Go to Home Page
+          </button>
+        </div>
+      </div>
+    )
   }
 
   if (isMultiTabBlocked) {
@@ -95,21 +145,19 @@ export function SplitPadPage({ pairCode, pairRole }: SplitPadPageProps) {
         isSaving={local.isSaving}
         canEdit={local.canEdit}
         lastSaved={local.lastSaved}
-        padId={localPadId}
+        padId={padId}
         content={local.content}
         isLoadingContent={local.isLoadingContent}
         isSplitMode
         onExitSplit={handleExitSplit}
         onClearContent={handleClearContent}
         remoteContent={remote.content}
-        pairCode={pairCode}
       />
       <div className="flex-1 flex flex-col sm:flex-row min-h-0">
         {/* Send pane (local, editable) */}
         <div className="flex-1 flex flex-col min-h-0">
           <div className="px-4 py-1 bg-green-900/50 border-b border-gray-700 flex items-center gap-2">
             <span className="text-xs font-medium text-green-400">Send</span>
-            <span className="text-xs font-mono text-gray-500">{pairCode}:{pairRole}</span>
           </div>
           <Editor
             content={local.content}
@@ -121,7 +169,6 @@ export function SplitPadPage({ pairCode, pairRole }: SplitPadPageProps) {
         <div className="flex-1 flex flex-col min-h-0 border-t sm:border-t-0 sm:border-l border-gray-700">
           <div className="px-4 py-1 bg-blue-900/50 border-b border-gray-700 flex items-center gap-2">
             <span className="text-xs font-medium text-blue-400">Receive</span>
-            <span className="text-xs font-mono text-gray-500">{pairCode}:{pairRole === 1 ? 2 : 1}</span>
           </div>
           <Editor
             content={remote.content}

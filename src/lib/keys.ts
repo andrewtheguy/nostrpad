@@ -2,7 +2,7 @@ import { generateSecretKey, getPublicKey } from 'nostr-tools/pure'
 import { sha256 } from '@noble/hashes/sha256'
 import { utf8ToBytes } from '@noble/hashes/utils'
 import { encode, encodeFixed } from './encoding'
-import { PAD_ID_BYTES, PAD_ID_LENGTH, PAIR_CODE_ALPHABET, PAIR_CODE_LENGTH } from './constants'
+import { PAD_ID_BYTES, PAD_ID_LENGTH, ALPHABET, PAIR_SECRET_DATA_LENGTH, PAIR_SECRET_LENGTH } from './constants'
 import { getDecryptedPrivateKey } from './sessionStorage'
 
 export interface PadKeys {
@@ -100,46 +100,53 @@ export function generateShareUrls(padId: string): { viewerUrl: string, editorUrl
   }
 }
 
+// First 22 primes for the second checksum weight
+const PRIMES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79]
+
 /**
- * Compute checksum character for pair code data using position-weighted sum.
- * Catches all single-character substitutions and transpositions of different characters.
+ * Compute 2 checksum characters for pair secret data using dual weighted sums mod 59.
+ * c1 = sum(val[i] * (i+1)) mod 59 — catches all single-char substitutions + transpositions
+ * c2 = sum(val[i] * primes[i]) mod 59 — independent second check with prime weights
  */
-export function computePairChecksum(data: string): string {
-  let sum = 0
+export function computePairSecretChecksum(data: string): string {
+  let sum1 = 0
+  let sum2 = 0
   for (let i = 0; i < data.length; i++) {
-    sum += PAIR_CODE_ALPHABET.indexOf(data[i]) * (i + 1)
+    const val = ALPHABET.indexOf(data[i])
+    sum1 += val * (i + 1)
+    sum2 += val * PRIMES[i]
   }
-  return PAIR_CODE_ALPHABET[sum % PAIR_CODE_ALPHABET.length]
+  return ALPHABET[sum1 % ALPHABET.length] + ALPHABET[sum2 % ALPHABET.length]
 }
 
 /**
- * Validate a pair code: correct length, valid characters, and checksum matches.
+ * Validate a pair secret: correct length (24), all chars in ALPHABET, checksum match.
  */
-export function isValidPairCode(code: string): boolean {
-  if (code.length !== PAIR_CODE_LENGTH) return false
-  for (const ch of code) {
-    if (!PAIR_CODE_ALPHABET.includes(ch)) return false
+export function isValidPairSecret(secret: string): boolean {
+  if (secret.length !== PAIR_SECRET_LENGTH) return false
+  for (const ch of secret) {
+    if (!ALPHABET.includes(ch)) return false
   }
-  const data = code.slice(0, -1)
-  const checksum = code.slice(-1)
-  return computePairChecksum(data) === checksum
+  const data = secret.slice(0, PAIR_SECRET_DATA_LENGTH)
+  const checksum = secret.slice(PAIR_SECRET_DATA_LENGTH)
+  return computePairSecretChecksum(data) === checksum
 }
 
 /**
- * Generate a random pair code: (PAIR_CODE_LENGTH - 1) random chars + 1 checksum char
+ * Generate a random pair secret: 22 random ALPHABET chars + 2 checksum chars = 24 total
+ * Provides ~129 bits entropy (log2(59^22))
  */
-export function generatePairCode(): string {
-  const dataLength = PAIR_CODE_LENGTH - 1
-  const bytes = crypto.getRandomValues(new Uint8Array(dataLength))
-  const data = Array.from(bytes).map(b => PAIR_CODE_ALPHABET[b % PAIR_CODE_ALPHABET.length]).join('')
-  return data + computePairChecksum(data)
+export function generatePairSecret(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(PAIR_SECRET_DATA_LENGTH))
+  const data = Array.from(bytes).map(b => ALPHABET[b % ALPHABET.length]).join('')
+  return data + computePairSecretChecksum(data)
 }
 
 /**
  * Derive deterministic keypairs for a pair session
- * Each side gets its own secret key derived from sha256("nostrpad-pair:" + code + ":" + side)
+ * Each side gets its own secret key derived from sha256("nostrpad-pair:" + secret + ":" + side)
  */
-export function derivePairKeys(code: string, role: 1 | 2): {
+export function derivePairKeys(secret: string, role: 1 | 2): {
   localSecretKey: Uint8Array
   localPublicKey: string
   localPadId: string
@@ -148,11 +155,11 @@ export function derivePairKeys(code: string, role: 1 | 2): {
   const localSide = role
   const remoteSide = role === 1 ? 2 : 1
 
-  const localSecretKey = sha256(utf8ToBytes(`nostrpad-pair:${code}:${localSide}`))
+  const localSecretKey = sha256(utf8ToBytes(`nostrpad-pair:${secret}:${localSide}`))
   const localPublicKey = getPublicKey(localSecretKey)
   const localPadId = encodeFixed(hexToBytes(localPublicKey).slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
 
-  const remoteSecretKey = sha256(utf8ToBytes(`nostrpad-pair:${code}:${remoteSide}`))
+  const remoteSecretKey = sha256(utf8ToBytes(`nostrpad-pair:${secret}:${remoteSide}`))
   const remotePublicKey = getPublicKey(remoteSecretKey)
   const remotePadId = encodeFixed(hexToBytes(remotePublicKey).slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
 

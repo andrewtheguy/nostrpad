@@ -16,10 +16,9 @@ interface HeaderProps {
   onExitSplit?: () => void
   onClearContent?: () => void
   remoteContent?: string
-  pairCode?: string
 }
 
-export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoadingContent, isSplitMode, onExitSplit, onClearContent, remoteContent, pairCode }: HeaderProps) {
+export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoadingContent, isSplitMode, onExitSplit, onClearContent, remoteContent }: HeaderProps) {
   const [showShareModal, setShowShareModal] = useState(false)
   const [showInfoModal, setShowInfoModal] = useState(false)
   const [showPairModal, setShowPairModal] = useState(false)
@@ -83,7 +82,7 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoading
           </button>
           {isSplitMode && (
             <span className="px-2 py-0.5 text-xs font-medium bg-purple-600 text-purple-100 rounded">
-              {pairCode ? `Pair: ${pairCode}` : 'Split'}
+              Pair
             </span>
           )}
           {!canEdit && !isSplitMode && (
