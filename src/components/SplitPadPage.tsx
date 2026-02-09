@@ -7,16 +7,19 @@ import { Editor } from './Editor'
 import { Footer } from './Footer'
 
 interface SplitPadPageProps {
-  padId: string
+  pairCode: string
 }
 
-export function SplitPadPage({ padId }: SplitPadPageProps) {
+export function SplitPadPage({ pairCode }: SplitPadPageProps) {
   const [isMultiTabBlocked, setIsMultiTabBlocked] = useState(false)
   const [pairKeys, setPairKeys] = useState<{
     localSecretKey: Uint8Array
     localPublicKey: string
+    localPadId: string
     remotePadId: string
     pairCode: string
+    localContentKey: CryptoKey
+    remoteContentKey: CryptoKey
   } | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -25,7 +28,7 @@ export function SplitPadPage({ padId }: SplitPadPageProps) {
     let cancelled = false
     async function loadSession() {
       try {
-        const session = await getDecryptedPairSession(padId)
+        const session = await getDecryptedPairSession(pairCode)
         if (cancelled) return
         if (!session) {
           setLoadError('Pair session not found')
@@ -43,13 +46,14 @@ export function SplitPadPage({ padId }: SplitPadPageProps) {
     }
     loadSession()
     return () => { cancelled = true }
-  }, [padId])
+  }, [pairCode])
 
   // Local pad (editable)
   const local = useNostrPad({
-    padId: padId,
+    padId: pairKeys?.localPadId ?? '',
     publicKey: pairKeys?.localPublicKey ?? '',
     secretKey: pairKeys?.localSecretKey ?? null,
+    contentKey: pairKeys?.localContentKey ?? null,
     isBlocked: isMultiTabBlocked || isLoading || !!loadError
   })
 
@@ -58,14 +62,15 @@ export function SplitPadPage({ padId }: SplitPadPageProps) {
     padId: pairKeys?.remotePadId ?? '',
     publicKey: '',
     secretKey: null,
+    contentKey: pairKeys?.remoteContentKey ?? null,
     isBlocked: !pairKeys || !!loadError
   })
 
   // Single-tab editor enforcement for local pad
   useEffect(() => {
-    if (!local.canEdit || !padId) return
+    if (!local.canEdit || !pairCode) return
 
-    const channelName = `nostrpad-editor-${padId}`
+    const channelName = `nostrpad-editor-${pairCode}`
     const channel = new BroadcastChannel(channelName)
 
     channel.postMessage('NEW_EDITOR')
@@ -79,7 +84,7 @@ export function SplitPadPage({ padId }: SplitPadPageProps) {
     return () => {
       channel.close()
     }
-  }, [local.canEdit, padId])
+  }, [local.canEdit, pairCode])
 
   const handleExitSplit = () => {
     navigateTo('/')
@@ -147,7 +152,7 @@ export function SplitPadPage({ padId }: SplitPadPageProps) {
         isSaving={local.isSaving}
         canEdit={local.canEdit}
         lastSaved={local.lastSaved}
-        padId={padId}
+        padId={pairKeys?.localPadId ?? ''}
         content={local.content}
         isLoadingContent={local.isLoadingContent}
         isSplitMode

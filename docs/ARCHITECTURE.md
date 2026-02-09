@@ -103,7 +103,7 @@ Path-based routing with three route families:
 |-------------|------|-------------|
 | `/s/<padId>` | View | Read-only sender/receiver pad |
 | `/s/<padId>/rw` | Edit | Edit mode, requires active session with matching secret key |
-| `/p/<padId>` | Pair | Split-screen pair mode (send + receive panes) |
+| `/p/<pairCode>` | Pair | Split-screen pair mode (send + receive panes) |
 | `/` | Start | Session management modal |
 
 The `App.tsx` component handles routing via `popstate` events and `navigation.ts` provides `navigateTo()` for programmatic path changes using `history.pushState`.
@@ -231,18 +231,19 @@ Pair mode allows two users sharing the same secret key to create split-screen se
 
 #### Pair Secret Key Storage
 
-The pair secret key is stored in a separate IndexedDB database (`nostrpad-pair-sessions`, version 4) with two object stores: `pairSecretKey` and `pairSessions`.
+The pair secret key is stored in a separate IndexedDB database (`nostrpad-pair-sessions`, version 5) with two object stores: `pairSecretKey` and `pairSessions`.
 
 ```typescript
 interface PairSecretKeyData {
-  hmacKey: CryptoKey        // non-extractable HMAC-SHA256
+  hmacKey: CryptoKey        // non-extractable HMAC-SHA256 (for signing key derivation)
+  hkdfKey: CryptoKey        // non-extractable HKDF base key (for content encryption key derivation)
   fingerprint: string       // 11-char base59 string
   createdAt: number
   integrityTag: Uint8Array  // SHA-256(fingerprint + createdAt)
 }
 ```
 
-The raw secret key bytes are imported as a non-extractable HMAC-SHA256 `CryptoKey` on store. After import, the raw bytes are never accessible to JavaScript.
+The raw secret key bytes are imported as both a non-extractable HMAC-SHA256 `CryptoKey` (for signing key derivation) and a non-extractable HKDF `CryptoKey` (for content encryption key derivation) on store. After import, the raw bytes are never accessible to JavaScript.
 
 **Secret Key Encoding:** For generation and import, the 32-byte secret key is encoded as a 46-character string (44 data chars in base-59 + 2 checksum chars). The checksum uses dual weighted sums (position-weighted + prime-weighted) mod 59 to catch single substitutions and transpositions.
 
@@ -300,27 +301,52 @@ interface PairSessionData {
 }
 ```
 
-On load (`getDecryptedPairSession`), derived pad IDs are verified against stored values. If `derivedLocalPadId !== requestedLocalPadId` or `derivedRemotePadId !== storedRemotePadId`, the session is cleared as corrupt.
+Sessions are keyed by `pairCode` in IndexedDB. On load (`getDecryptedPairSession(pairCode)`), derived pad IDs are verified against stored values. If they don't match, the session is cleared as corrupt. Content encryption keys are also derived at load time using HKDF (see Content Encryption below).
 
 ### Content Encryption
 
-All pad content (both sender/receiver and pair mode) is encrypted using NIP-44 before publishing. The encryption key is derived deterministically from the padId, **not** from the secret key:
+Content encryption differs between sender/receiver mode and pair mode.
+
+**Sender/Receiver mode (NIP-44):**
+
+Content is encrypted using NIP-44 with a key derived deterministically from the padId:
 
 ```typescript
-// Derive encryption key deterministically from padId
 const conversationKey = sha256(`nostrpad:${padId}`)
+const encrypted = nip44Encrypt(JSON.stringify(payload), conversationKey)
+```
 
-// Payload structure
+Since the padId is in the URL, anyone with the URL can decrypt content. This provides obfuscation from relay operators, not confidentiality.
+
+**Pair mode (AES-GCM with HKDF-derived keys):**
+
+Content is encrypted using AES-GCM-256 with keys derived from the root secret via HKDF. Each side of the pair has its own content key:
+
+```typescript
+// Derive content keys from HKDF root key
+const localContentKey = crypto.subtle.deriveKey(
+  { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0),
+    info: encode(`nostrpad-pair-content:${pairCode}:${role}`) },
+  hkdfKey,
+  { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+)
+```
+
+Wire format: `base64( 0x01 || IV[12] || AES-GCM-ciphertext-with-tag )`
+- `0x01` version byte for format detection
+- 12-byte random IV per encryption
+- AES-GCM ciphertext includes 16-byte auth tag automatically
+
+Both users derive the same two content keys (one per side) because they share the same HKDF root key and pairCode. The content keys are non-extractable `CryptoKey` objects, providing protection even if someone has scripting access to IndexedDB.
+
+**Common payload structure:**
+
+```typescript
 interface PadPayload {
   text: string      // Actual content
   timestamp: number // Client timestamp (ms)
 }
-
-// Encrypt payload
-const encrypted = nip44Encrypt(JSON.stringify(payload), conversationKey)
 ```
-
-Since the padId is in the URL, anyone with the URL can decrypt content. In pair mode, the padId is derived from the HMAC-derived public key (not from the root secret key directly), but it is still visible in the `/p/<padId>` URL. The encryption provides obfuscation from relay operators, not confidentiality.
 
 The `timestamp` field enables conflict resolution - newer timestamps win.
 
@@ -336,7 +362,7 @@ NostrPad uses kind 30078 (replaceable application-specific events):
     ["d", "nostrpad"],      // Makes it replaceable per-author
     ["client", "nostrpad"]  // Client identifier
   ],
-  content: "<NIP-44 encrypted payload>",
+  content: "<NIP-44 (sender/receiver) or AES-GCM (pair mode) encrypted payload>",
   pubkey: "<author public key>",
   sig: "<signature>"
 }
@@ -384,9 +410,11 @@ Sender/receiver view orchestrator:
 ### SplitPadPage.tsx
 
 Pair mode split-screen view:
-- Loads pair session from IndexedDB via `getDecryptedPairSession`
-- Creates two `useNostrPad` instances: local (editable, `isBlocked` while loading) and remote (view-only, `isBlocked` until pair keys resolve)
-- Single-tab editor enforcement via BroadcastChannel
+- Accepts `pairCode` prop (URL is `/p/<pairCode>`, same for both users)
+- Loads pair session from IndexedDB via `getDecryptedPairSession(pairCode)`
+- Derives HKDF content keys (localContentKey, remoteContentKey) for AES-GCM encryption
+- Creates two `useNostrPad` instances: local (editable, with localContentKey) and remote (view-only, with remoteContentKey)
+- Single-tab editor enforcement via BroadcastChannel (keyed by pairCode)
 - Renders Send pane (left/top, editable) and Receive pane (right/bottom, read-only)
 - Shows loading, error, and multi-tab-blocked states
 
@@ -423,6 +451,7 @@ interface UseNostrPadOptions {
   padId: string
   publicKey: string
   secretKey: Uint8Array | null
+  contentKey?: CryptoKey | null  // When provided, uses AES-GCM (pair mode) instead of NIP-44
   sessionCreatedAt?: number
   onLogoutSignal?: () => void
   isBlocked?: boolean  // Skip subscriptions and publishing when true
@@ -471,9 +500,9 @@ setContent()
     │
     ▼ (500ms debounce)
     │
-createPadEvent(text, padId, secretKey)
+createPadEvent (sender/receiver) or createPairPadEvent (pair mode)
     │
-    ├─► Encrypt payload (NIP-44)
+    ├─► Encrypt payload (NIP-44 or AES-GCM)
     ├─► Sign event
     └─► Finalize event
     │
@@ -508,11 +537,12 @@ For each event received:
 
 - **Session secret keys (sender/receiver)**: Encrypted at rest in IndexedDB with non-extractable AES keys
 - **Pair mode root key**: Stored as a non-extractable HMAC-SHA256 CryptoKey in IndexedDB — raw bytes never enter JavaScript after initial import
-- **Content on relays** (obfuscation only): NIP-44 encryption using `sha256("nostrpad:" + padId)`. This prevents casual reading by relay operators but is **not confidential** — anyone with the padId (which is in the URL) can derive the key and decrypt. See "What's NOT Protected" below.
+- **Content on relays (sender/receiver)** (obfuscation only): NIP-44 encryption using `sha256("nostrpad:" + padId)`. This prevents casual reading by relay operators but is **not confidential** — anyone with the padId (which is in the URL) can derive the key and decrypt.
+- **Content on relays (pair mode)**: AES-GCM-256 with HKDF-derived non-extractable keys from the root secret. Only someone with the root secret key can derive the content encryption keys. Even with scripting access to IndexedDB, the content keys cannot be exported.
 
 ### What's NOT Protected
 
-- **Content confidentiality**: Anyone with the padId can derive the decryption key (`sha256("nostrpad:" + padId)`). This applies to both sender/receiver and pair mode — the padId is in the URL.
+- **Content confidentiality (sender/receiver)**: Anyone with the padId can derive the decryption key (`sha256("nostrpad:" + padId)`) — the padId is in the URL.
 - **Metadata**: Relay operators can see pubkeys, timestamps, event sizes
 - **Browser-level attacks**: XSS could access decrypted content in memory
 - **Derived keys in memory**: In both modes, nostr signing keys exist as raw `Uint8Array` in JavaScript memory at runtime. The HMAC root key (pair mode) and AES wrapping key (sender/receiver) are non-extractable, but the derived/decrypted signing keys are exposed during use.

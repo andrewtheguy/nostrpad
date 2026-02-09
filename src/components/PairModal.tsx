@@ -58,7 +58,7 @@ export function PairModal({ onClose }: PairModalProps) {
       }
       const { localPadId, remotePadId } = await derivePairKeys(result.hmacKey, generatedCode, 1)
       await createPairSession(localPadId, remotePadId, generatedCode, 1)
-      navigateTo('/p/' + localPadId)
+      navigateTo('/p/' + generatedCode)
       onClose()
     } catch (err) {
       console.error('Failed to start pair session:', err)
@@ -92,7 +92,7 @@ export function PairModal({ onClose }: PairModalProps) {
       }
       const { localPadId, remotePadId } = await derivePairKeys(result.hmacKey, code, 2)
       await createPairSession(localPadId, remotePadId, code, 2)
-      navigateTo('/p/' + localPadId)
+      navigateTo('/p/' + code)
       onClose()
     } catch (err) {
       console.error('Failed to join pair session:', err)

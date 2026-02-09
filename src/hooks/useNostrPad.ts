@@ -3,13 +3,14 @@ import { SimplePool } from 'nostr-tools/pool'
 import type { Event } from 'nostr-tools/core'
 import { useDebounce } from './useDebounce'
 import { useRelayDiscovery } from './useRelayDiscovery'
-import { createPadEvent, createPadIdSearchFilter, publishEvent, isValidPadEvent, getPadIdFromPubkey, decodePayload, isValidLogoutEvent } from '../lib/nostr'
+import { createPadEvent, createPairPadEvent, createPadIdSearchFilter, publishEvent, isValidPadEvent, getPadIdFromPubkey, decodePayload, decodePairPayload, isValidLogoutEvent } from '../lib/nostr'
 import { DEBOUNCE_MS, LOGOUT_KIND, NOSTRPAD_KIND, D_TAG } from '../lib/constants'
 
 interface UseNostrPadOptions {
   padId: string
   publicKey: string
   secretKey: Uint8Array | null
+  contentKey?: CryptoKey | null
   sessionCreatedAt?: number
   onLogoutSignal?: () => void
   isBlocked?: boolean
@@ -28,7 +29,7 @@ interface UseNostrPadReturn {
   isLoadingContent: boolean
 }
 
-export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onLogoutSignal, isBlocked = false }: UseNostrPadOptions): UseNostrPadReturn {
+export function useNostrPad({ padId, publicKey, secretKey, contentKey, sessionCreatedAt, onLogoutSignal, isBlocked = false }: UseNostrPadOptions): UseNostrPadReturn {
   const [content, setContentState] = useState('')
   const [relayStatus, setRelayStatus] = useState<Map<string, boolean>>(new Map())
   const [isSaving, setIsSaving] = useState(false)
@@ -80,7 +81,23 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
       setFoundPublicKey(event.pubkey)
     }
 
-    // Decode the payload to get text and timestamp
+    // Pair mode (contentKey provided): async decryption
+    if (contentKey) {
+      decodePairPayload(event.content, contentKey).then(payload => {
+        if (!payload) return
+        if (payload.timestamp > latestTimestampRef.current) {
+          latestEventRef.current = event
+          latestTimestampRef.current = payload.timestamp
+          latestTextRef.current = payload.text
+          if (!isLocalChangeRef.current) {
+            setContentState(payload.text)
+          }
+        }
+      }).catch(err => console.warn('Failed to decode pair payload:', err))
+      return
+    }
+
+    // Sender/receiver mode: existing sync NIP-44 path
     const payload = decodePayload(event.content, padId)
     if (!payload) return
 
@@ -95,7 +112,7 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
         setContentState(payload.text)
       }
     }
-  }, [padId, publicKey, canEdit, sessionCreatedAt, onLogoutSignal])
+  }, [padId, publicKey, canEdit, sessionCreatedAt, onLogoutSignal, contentKey])
 
   // Reset state and refs when padId changes
   useEffect(() => {
@@ -130,7 +147,7 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
       limit: 1
     }
 
-    pool.querySync(activeRelays, contentFilter).then(events => {
+    pool.querySync(activeRelays, contentFilter).then(async (events) => {
       if (events.length > 0) {
         // Find the most recent valid event
         const sorted = events
@@ -139,7 +156,9 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
 
         if (sorted.length > 0) {
           const latestEvent = sorted[0]
-          const payload = decodePayload(latestEvent.content, padId)
+          const payload = contentKey
+            ? await decodePairPayload(latestEvent.content, contentKey)
+            : decodePayload(latestEvent.content, padId)
           if (payload && payload.timestamp > latestTimestampRef.current) {
             latestEventRef.current = latestEvent
             latestTimestampRef.current = payload.timestamp
@@ -176,7 +195,7 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
       sub.close()
       pool.close(activeRelays)
     }
-  }, [canEdit, activeRelays, isDiscovering, padId, publicKey, handleEvent, isBlocked])
+  }, [canEdit, activeRelays, isDiscovering, padId, publicKey, handleEvent, isBlocked, contentKey])
 
   // Initialize pool and subscribe for view-only mode
   useEffect(() => {
@@ -234,7 +253,9 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
       setIsSaving(true)
 
       try {
-        const event = createPadEvent(debouncedContent, publishPadId, secretKey)
+        const event = contentKey
+          ? await createPairPadEvent(debouncedContent, contentKey, secretKey)
+          : createPadEvent(debouncedContent, publishPadId, secretKey)
         const pool = poolRef.current
         if (pool) {
           // Use discovered relays
@@ -247,12 +268,13 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
 
           latestEventRef.current = event
           // Update timestamp and text refs from the published event
-          const payload = decodePayload(event.content, publishPadId)
+          const payload = contentKey
+            ? await decodePairPayload(event.content, contentKey)
+            : decodePayload(event.content, publishPadId)
           if (payload) {
             latestTimestampRef.current = payload.timestamp
             latestTextRef.current = payload.text
           } else {
-            // decodePayload already handles errors; log context to avoid conflating with publish failures
             console.warn(`Failed to decode payload for event ${event.id} (padId: ${publishPadId})`)
           }
           setLastSaved(new Date())
@@ -270,7 +292,7 @@ export function useNostrPad({ padId, publicKey, secretKey, sessionCreatedAt, onL
     }
 
     doPublish()
-  }, [debouncedContent, canEdit, secretKey, connectedCount, activeRelays, isDiscovering, padId, isBlocked])
+  }, [debouncedContent, canEdit, secretKey, contentKey, connectedCount, activeRelays, isDiscovering, padId, isBlocked])
 
   // Set content handler
   const setContent = useCallback((newContent: string) => {

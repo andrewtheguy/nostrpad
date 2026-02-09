@@ -6,7 +6,7 @@ import { SessionStartModal } from './components/SessionStartModal'
 
 function App() {
   const [route, setRoute] = useState<{ padId: string; isEdit: boolean } | null>(null)
-  const [pairRoute, setPairRoute] = useState<{ padId: string } | null>(null)
+  const [pairRoute, setPairRoute] = useState<{ pairCode: string } | null>(null)
   const [showModal, setShowModal] = useState(false)
 
   useEffect(() => {
@@ -14,7 +14,7 @@ function App() {
       // 1. Check for pair mode: /p/PADID
       const pairMatch = window.location.pathname.match(/^\/p\/([^/]+)$/)
       if (pairMatch) {
-        setPairRoute({ padId: pairMatch[1] })
+        setPairRoute({ pairCode: pairMatch[1] })
         setRoute(null)
         setShowModal(false)
         return
@@ -49,7 +49,7 @@ function App() {
   }
 
   if (pairRoute) {
-    return <SplitPadPage padId={pairRoute.padId} />
+    return <SplitPadPage pairCode={pairRoute.pairCode} />
   }
 
   if (showModal) {
