@@ -1,6 +1,4 @@
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure'
-import { sha256 } from '@noble/hashes/sha256'
-import { utf8ToBytes } from '@noble/hashes/utils'
 import { encode, encodeFixed } from './encoding'
 import { PAD_ID_BYTES, PAD_ID_LENGTH, PAIR_CODE_ALPHABET, PAIR_CODE_LENGTH, SECRET_KEY_ALPHABET, SECRET_KEY_DATA_LENGTH, SECRET_KEY_ENCODED_LENGTH } from './constants'
 import { getDecryptedPrivateKey } from './sessionStorage'
@@ -137,22 +135,25 @@ export function generatePairCode(): string {
 
 /**
  * Derive deterministic keypairs for a pair session.
- * Uses secretKey (global 32-byte key) + pairCode (6-char channel ID) + role to derive keys.
+ * Uses secretKey (non-extractable HMAC CryptoKey) + pairCode (6-char channel ID) + role to derive keys.
+ * The root secret key never leaves Web Crypto — only derived keys are exposed as raw bytes.
  */
-export function derivePairKeys(secretKey: Uint8Array, pairCode: string, role: 1 | 2): {
+export async function derivePairKeys(secretKey: CryptoKey, pairCode: string, role: 1 | 2): Promise<{
   localSecretKey: Uint8Array
   localPublicKey: string
   localPadId: string
   remotePadId: string
-} {
+}> {
   const localSide = role
   const remoteSide = role === 1 ? 2 : 1
 
-  const localDerivedKey = sha256(utf8ToBytes(`nostrpad-pair:${bytesToHex(secretKey)}:${pairCode}:${localSide}`))
+  const encoder = new TextEncoder()
+
+  const localDerivedKey = new Uint8Array(await crypto.subtle.sign('HMAC', secretKey, encoder.encode(`nostrpad-pair:${pairCode}:${localSide}`)))
   const localPublicKey = getPublicKey(localDerivedKey)
   const localPadId = encodeFixed(hexToBytes(localPublicKey).slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
 
-  const remoteDerivedKey = sha256(utf8ToBytes(`nostrpad-pair:${bytesToHex(secretKey)}:${pairCode}:${remoteSide}`))
+  const remoteDerivedKey = new Uint8Array(await crypto.subtle.sign('HMAC', secretKey, encoder.encode(`nostrpad-pair:${pairCode}:${remoteSide}`)))
   const remotePublicKey = getPublicKey(remoteDerivedKey)
   const remotePadId = encodeFixed(hexToBytes(remotePublicKey).slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
 
@@ -273,6 +274,3 @@ function hexToBytes(hex: string): Uint8Array {
   return bytes
 }
 
-export function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
-}

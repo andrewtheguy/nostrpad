@@ -9,7 +9,7 @@ import { BOOTSTRAP_RELAYS, PAIR_CODE_LENGTH, SECRET_KEY_ENCODED_LENGTH } from '.
 import { createLogoutEvent, publishEvent } from '../lib/nostr'
 import { decode, encodeFixed } from '../lib/encoding'
 import { PAD_ID_BYTES, PAD_ID_LENGTH } from '../lib/constants'
-import { storePairSecretKey, getDecryptedPairSecretKey, hasPairSecretKey, clearPairSecretKey, createPairSession, listPairSessions, clearPairSession } from '../lib/pairSessionStorage'
+import { storePairSecretKey, getPairSecretKey, hasPairSecretKey, clearPairSecretKey, createPairSession, listPairSessions, clearPairSession } from '../lib/pairSessionStorage'
 import type { PairSessionMetadata } from '../lib/pairSessionStorage'
 
 // Helper function
@@ -69,10 +69,6 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
   const [pairSetupImportInput, setPairSetupImportInput] = useState('')
   const [pairSetupError, setPairSetupError] = useState('')
   const [isPairSetupProcessing, setIsPairSetupProcessing] = useState(false)
-
-  // Export secret key state
-  const [exportedKey, setExportedKey] = useState<string | null>(null)
-  const [copiedExportedKey, setCopiedExportedKey] = useState(false)
 
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pairJoinInputRef = useRef<HTMLInputElement>(null)
@@ -366,15 +362,13 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     if (!generatedCode || isPairProcessing) return
     setIsPairProcessing(true)
     try {
-      const sk = await getDecryptedPairSecretKey()
+      const sk = await getPairSecretKey()
       if (!sk) {
         setPairError('Secret key not found. Please set up your secret key first.')
         setIsPairProcessing(false)
         return
       }
-      const { localSecretKey, localPadId, remotePadId } = derivePairKeys(sk, generatedCode, 1)
-      // Store just the session metadata; keys are re-derived on load
-      void localSecretKey
+      const { localPadId, remotePadId } = await derivePairKeys(sk, generatedCode, 1)
       await createPairSession(localPadId, remotePadId, generatedCode, 1)
       navigateTo('/p/' + localPadId)
       onSessionStarted()
@@ -402,14 +396,13 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     }
     setIsPairProcessing(true)
     try {
-      const sk = await getDecryptedPairSecretKey()
+      const sk = await getPairSecretKey()
       if (!sk) {
         setPairError('Secret key not found. Please set up your secret key first.')
         setIsPairProcessing(false)
         return
       }
-      const { localSecretKey, localPadId, remotePadId } = derivePairKeys(sk, code, 2)
-      void localSecretKey
+      const { localPadId, remotePadId } = await derivePairKeys(sk, code, 2)
       await createPairSession(localPadId, remotePadId, code, 2)
       navigateTo('/p/' + localPadId)
       onSessionStarted()
@@ -424,26 +417,10 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     if (e.key === 'Enter') handlePairJoin()
   }
 
-  const handleExportSecretKey = async () => {
-    try {
-      const sk = await getDecryptedPairSecretKey()
-      if (!sk) {
-        setPairError('Secret key not found')
-        return
-      }
-      setExportedKey(encodeSecretKey(sk))
-      setCopiedExportedKey(false)
-    } catch (err) {
-      console.error('Failed to export secret key:', err)
-      setPairError('Failed to export secret key')
-    }
-  }
-
   const handleClearSecretKey = async () => {
     if (!confirm('Are you sure you want to clear your pair secret key? You will lose access to all pair sessions on this device.')) return
     try {
       await clearPairSecretKey()
-      setExportedKey(null)
       setMode('mode-select')
     } catch (err) {
       console.error('Failed to clear secret key:', err)
@@ -790,44 +767,15 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
             </div>
           )}
 
-          {/* Export / Clear secret key */}
+          {/* Clear secret key */}
           <div className="pt-4 mt-4 border-t border-gray-700">
-            {exportedKey && (
-              <div className="mb-3">
-                <div className="bg-gray-900 p-3 rounded flex items-center justify-between gap-2">
-                  <code className="text-xs font-mono text-green-300 break-all select-all">{exportedKey}</code>
-                  <button
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(exportedKey)
-                        setCopiedExportedKey(true)
-                        setTimeout(() => setCopiedExportedKey(false), 2000)
-                      } catch (err) {
-                        console.error('Failed to copy:', err)
-                      }
-                    }}
-                    className="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded text-xs transition-colors shrink-0"
-                  >
-                    {copiedExportedKey ? 'Copied!' : 'Copy'}
-                  </button>
-                </div>
-              </div>
-            )}
             {pairError && !generatedCode && pairTab === 'create' && <p className="text-red-400 text-xs mb-2">{pairError}</p>}
-            <div className="flex gap-2">
-              <button
-                onClick={handleExportSecretKey}
-                className="flex-1 px-3 py-2 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors"
-              >
-                Export Secret Key
-              </button>
-              <button
-                onClick={handleClearSecretKey}
-                className="flex-1 px-3 py-2 text-xs bg-red-900 hover:bg-red-800 text-red-300 rounded transition-colors"
-              >
-                Clear Secret Key
-              </button>
-            </div>
+            <button
+              onClick={handleClearSecretKey}
+              className="w-full px-3 py-2 text-xs bg-red-900 hover:bg-red-800 text-red-300 rounded transition-colors"
+            >
+              Clear Secret Key
+            </button>
           </div>
 
           <div className="mt-6 flex justify-end">

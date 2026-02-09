@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { generatePairCode, isValidPairCode, derivePairKeys } from '../lib/keys'
-import { getDecryptedPairSecretKey, createPairSession } from '../lib/pairSessionStorage'
+import { getPairSecretKey, createPairSession } from '../lib/pairSessionStorage'
 import { navigateTo } from '../lib/navigation'
 import { PAIR_CODE_LENGTH } from '../lib/constants'
 
@@ -43,14 +43,13 @@ export function PairModal({ onClose }: PairModalProps) {
     if (!generatedCode || isProcessing) return
     setIsProcessing(true)
     try {
-      const sk = await getDecryptedPairSecretKey()
+      const sk = await getPairSecretKey()
       if (!sk) {
         setError('Secret key not found. Please set up your secret key from the home screen.')
         setIsProcessing(false)
         return
       }
-      const { localSecretKey, localPadId, remotePadId } = derivePairKeys(sk, generatedCode, 1)
-      void localSecretKey
+      const { localPadId, remotePadId } = await derivePairKeys(sk, generatedCode, 1)
       await createPairSession(localPadId, remotePadId, generatedCode, 1)
       navigateTo('/p/' + localPadId)
       onClose()
@@ -78,14 +77,13 @@ export function PairModal({ onClose }: PairModalProps) {
     }
     setIsProcessing(true)
     try {
-      const sk = await getDecryptedPairSecretKey()
+      const sk = await getPairSecretKey()
       if (!sk) {
         setError('Secret key not found. Please set up your secret key from the home screen.')
         setIsProcessing(false)
         return
       }
-      const { localSecretKey, localPadId, remotePadId } = derivePairKeys(sk, code, 2)
-      void localSecretKey
+      const { localPadId, remotePadId } = await derivePairKeys(sk, code, 2)
       await createPairSession(localPadId, remotePadId, code, 2)
       navigateTo('/p/' + localPadId)
       onClose()

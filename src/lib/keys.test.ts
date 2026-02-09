@@ -108,42 +108,46 @@ describe('isValidPairCode', () => {
   })
 })
 
+async function importHmacKey(sk: Uint8Array): Promise<CryptoKey> {
+  return crypto.subtle.importKey('raw', sk as BufferSource, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+}
+
 describe('derivePairKeys', () => {
-  it('is deterministic', () => {
-    const sk = generateSecretKey()
+  it('is deterministic', async () => {
+    const sk = await importHmacKey(generateSecretKey())
     const code = generatePairCode()
-    const a = derivePairKeys(sk, code, 1)
-    const b = derivePairKeys(sk, code, 1)
+    const a = await derivePairKeys(sk, code, 1)
+    const b = await derivePairKeys(sk, code, 1)
     expect(a.localPadId).toBe(b.localPadId)
     expect(a.remotePadId).toBe(b.remotePadId)
     expect(a.localPublicKey).toBe(b.localPublicKey)
   })
 
-  it('role 1 local = role 2 remote', () => {
-    const sk = generateSecretKey()
+  it('role 1 local = role 2 remote', async () => {
+    const sk = await importHmacKey(generateSecretKey())
     const code = generatePairCode()
-    const r1 = derivePairKeys(sk, code, 1)
-    const r2 = derivePairKeys(sk, code, 2)
+    const r1 = await derivePairKeys(sk, code, 1)
+    const r2 = await derivePairKeys(sk, code, 2)
     expect(r1.localPadId).toBe(r2.remotePadId)
     expect(r1.remotePadId).toBe(r2.localPadId)
   })
 
-  it('different codes produce different pad IDs', () => {
-    const sk = generateSecretKey()
+  it('different codes produce different pad IDs', async () => {
+    const sk = await importHmacKey(generateSecretKey())
     const code1 = generatePairCode()
     let code2 = generatePairCode()
     while (code2 === code1) code2 = generatePairCode()
-    const r1 = derivePairKeys(sk, code1, 1)
-    const r2 = derivePairKeys(sk, code2, 1)
+    const r1 = await derivePairKeys(sk, code1, 1)
+    const r2 = await derivePairKeys(sk, code2, 1)
     expect(r1.localPadId).not.toBe(r2.localPadId)
   })
 
-  it('different secret keys produce different pad IDs', () => {
-    const sk1 = generateSecretKey()
-    const sk2 = generateSecretKey()
+  it('different secret keys produce different pad IDs', async () => {
+    const sk1 = await importHmacKey(generateSecretKey())
+    const sk2 = await importHmacKey(generateSecretKey())
     const code = generatePairCode()
-    const r1 = derivePairKeys(sk1, code, 1)
-    const r2 = derivePairKeys(sk2, code, 1)
+    const r1 = await derivePairKeys(sk1, code, 1)
+    const r2 = await derivePairKeys(sk2, code, 1)
     expect(r1.localPadId).not.toBe(r2.localPadId)
   })
 })

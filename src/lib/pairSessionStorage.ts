@@ -1,17 +1,14 @@
-import { encryptPrivateKey, decryptPrivateKey } from './sessionStorage'
 import { derivePairKeys } from './keys'
 
 const DB_NAME = 'nostrpad-pair-sessions'
-const DB_VERSION = 2
+const DB_VERSION = 3
 const SECRET_KEY_STORE = 'pairSecretKey'
 const SESSIONS_STORE = 'pairSessions'
 
 let cachedDb: IDBDatabase | Promise<IDBDatabase> | null = null
 
 interface PairSecretKeyData {
-  encryptedKey: Uint8Array
-  aesKey: CryptoKey
-  iv: Uint8Array
+  hmacKey: CryptoKey  // non-extractable HMAC-SHA256
   createdAt: number
 }
 
@@ -68,7 +65,13 @@ async function initPairDB(): Promise<IDBDatabase> {
 }
 
 export async function storePairSecretKey(secretKey: Uint8Array): Promise<void> {
-  const { encrypted, key, iv } = await encryptPrivateKey(secretKey)
+  const hmacKey = await crypto.subtle.importKey(
+    'raw',
+    secretKey as BufferSource,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false, // non-extractable
+    ['sign']
+  )
   const createdAt = Date.now()
 
   const db = await initPairDB()
@@ -76,9 +79,7 @@ export async function storePairSecretKey(secretKey: Uint8Array): Promise<void> {
   const store = transaction.objectStore(SECRET_KEY_STORE)
 
   const data: PairSecretKeyData = {
-    encryptedKey: encrypted,
-    aesKey: key,
-    iv,
+    hmacKey,
     createdAt
   }
 
@@ -114,7 +115,7 @@ export async function storePairSecretKey(secretKey: Uint8Array): Promise<void> {
   })
 }
 
-export async function getDecryptedPairSecretKey(): Promise<Uint8Array | null> {
+export async function getPairSecretKey(): Promise<CryptoKey | null> {
   const db = await initPairDB()
   const transaction = db.transaction([SECRET_KEY_STORE], 'readonly')
   const store = transaction.objectStore(SECRET_KEY_STORE)
@@ -127,12 +128,7 @@ export async function getDecryptedPairSecretKey(): Promise<Uint8Array | null> {
 
   if (!data) return null
 
-  try {
-    return await decryptPrivateKey(data.encryptedKey, data.aesKey, data.iv)
-  } catch (error) {
-    console.error('Failed to decrypt pair secret key:', error)
-    return null
-  }
+  return data.hmacKey
 }
 
 export async function hasPairSecretKey(): Promise<boolean> {
@@ -244,11 +240,11 @@ export async function getDecryptedPairSession(localPadId: string): Promise<{ loc
 
   if (!session) return null
 
-  const secretKey = await getDecryptedPairSecretKey()
-  if (!secretKey) return null
+  const hmacKey = await getPairSecretKey()
+  if (!hmacKey) return null
 
   try {
-    const { localSecretKey, localPublicKey } = derivePairKeys(secretKey, session.pairCode, session.role)
+    const { localSecretKey, localPublicKey } = await derivePairKeys(hmacKey, session.pairCode, session.role)
     return { localSecretKey, localPublicKey, remotePadId: session.remotePadId, pairCode: session.pairCode }
   } catch (error) {
     console.error('Failed to derive pair session keys:', error)
