@@ -533,6 +533,18 @@ For each event received:
 
 ## Security Considerations
 
+### Key Roles by Mode
+
+**Sender/Receiver mode:**
+- Secret key → signing (write access). Required to publish updates.
+- PadId (in URL) → content decryption (read access). Anyone with the URL can read.
+- Content encryption is obfuscation from relay operators, not confidentiality from URL holders.
+
+**Pair mode:**
+- Root secret key → both signing key derivation AND content key derivation.
+- Pair code URL → cannot decrypt content without the root secret.
+- Content encryption provides true confidentiality.
+
 ### What's Protected
 
 - **Session secret keys (sender/receiver)**: Encrypted at rest in IndexedDB with non-extractable AES keys

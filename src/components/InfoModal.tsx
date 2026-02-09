@@ -63,8 +63,15 @@ export function InfoModal({ onClose }: InfoModalProps) {
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id="info-modal-title" className="text-xl font-semibold text-white mb-3">Note</h2>
-        <p className="text-sm text-gray-300 mb-6">
+        <p className="text-sm text-gray-300 mb-4">
           NostrPad is designed for temporary sharing rather than long-term storage. Sessions and data are ephemeral and may be purged periodically. Always have a backup of your data that you want to keep elsewhere.
+        </p>
+        <h3 className="text-sm font-semibold text-white mb-2">Security</h3>
+        <p className="text-sm text-gray-300 mb-2">
+          <span className="text-gray-200 font-medium">Sender/Receiver mode:</span> Your secret key controls who can edit the pad (write access). The shared viewer URL allows anyone to read content — encryption protects against relay operators, not link holders.
+        </p>
+        <p className="text-sm text-gray-300 mb-6">
+          <span className="text-gray-200 font-medium">Pair mode:</span> The shared secret key protects both read and write access. The pair code URL alone cannot decrypt content.
         </p>
         <div className="flex justify-end">
           <button
