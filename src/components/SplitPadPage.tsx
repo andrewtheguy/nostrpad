@@ -16,7 +16,7 @@ export function SplitPadPage({ padId }: SplitPadPageProps) {
     localSecretKey: Uint8Array
     localPublicKey: string
     remotePadId: string
-    fingerprint: string
+    pairCode: string
   } | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -150,7 +150,7 @@ export function SplitPadPage({ padId }: SplitPadPageProps) {
         content={local.content}
         isLoadingContent={local.isLoadingContent}
         isSplitMode
-        pairFingerprint={pairKeys?.fingerprint}
+        pairCode={pairKeys?.pairCode}
         onExitSplit={handleExitSplit}
         onClearContent={handleClearContent}
         remoteContent={remote.content}

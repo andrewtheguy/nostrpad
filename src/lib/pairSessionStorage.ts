@@ -1,56 +1,32 @@
-import { getPublicKey } from 'nostr-tools/pure'
 import { encryptPrivateKey, decryptPrivateKey } from './sessionStorage'
+import { derivePairKeys } from './keys'
 
 const DB_NAME = 'nostrpad-pair-sessions'
-const DB_VERSION = 1
-const STORE_NAME = 'pairSessions'
+const DB_VERSION = 2
+const SECRET_KEY_STORE = 'pairSecretKey'
+const SESSIONS_STORE = 'pairSessions'
 
 let cachedDb: IDBDatabase | Promise<IDBDatabase> | null = null
+
+interface PairSecretKeyData {
+  encryptedKey: Uint8Array
+  aesKey: CryptoKey
+  iv: Uint8Array
+  createdAt: number
+}
 
 interface PairSessionData {
   localPadId: string
   remotePadId: string
-  fingerprint: string
-  encryptedLocalSecretKey: Uint8Array
-  aesKey: CryptoKey
-  iv: Uint8Array
+  pairCode: string
+  role: 1 | 2
   createdAt: number
-  integrityTag: Uint8Array
 }
 
 export interface PairSessionMetadata {
   localPadId: string
-  fingerprint: string
+  pairCode: string
   createdAt: number
-}
-
-async function computePairIntegrityTag(
-  localPadId: string, remotePadId: string, fingerprint: string,
-  createdAt: number, iv: Uint8Array, encryptedData: Uint8Array
-): Promise<Uint8Array> {
-  const encoder = new TextEncoder()
-  const localPadIdBytes = encoder.encode(localPadId)
-  const remotePadIdBytes = encoder.encode(remotePadId)
-  const fingerprintBytes = encoder.encode(fingerprint)
-
-  const timestampBytes = new Uint8Array(8)
-  const view = new DataView(timestampBytes.buffer)
-  view.setBigInt64(0, BigInt(createdAt), false)
-
-  const combined = new Uint8Array(
-    localPadIdBytes.length + remotePadIdBytes.length + fingerprintBytes.length +
-    timestampBytes.length + iv.length + encryptedData.length
-  )
-  let offset = 0
-  combined.set(localPadIdBytes, offset); offset += localPadIdBytes.length
-  combined.set(remotePadIdBytes, offset); offset += remotePadIdBytes.length
-  combined.set(fingerprintBytes, offset); offset += fingerprintBytes.length
-  combined.set(timestampBytes, offset); offset += timestampBytes.length
-  combined.set(iv, offset); offset += iv.length
-  combined.set(encryptedData, offset)
-
-  const hash = await crypto.subtle.digest('SHA-256', combined)
-  return new Uint8Array(hash)
 }
 
 async function initPairDB(): Promise<IDBDatabase> {
@@ -78,10 +54,12 @@ async function initPairDB(): Promise<IDBDatabase> {
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
-      if (db.objectStoreNames.contains(STORE_NAME)) {
-        db.deleteObjectStore(STORE_NAME)
+      // No backward compat - wipe old stores
+      for (const name of Array.from(db.objectStoreNames)) {
+        db.deleteObjectStore(name)
       }
-      db.createObjectStore(STORE_NAME)
+      db.createObjectStore(SECRET_KEY_STORE)
+      db.createObjectStore(SESSIONS_STORE)
     }
   })
 
@@ -89,24 +67,136 @@ async function initPairDB(): Promise<IDBDatabase> {
   return promise
 }
 
-export async function createPairSession(localPadId: string, localSecretKey: Uint8Array, remotePadId: string, fingerprint: string): Promise<void> {
-  const { encrypted, key, iv } = await encryptPrivateKey(localSecretKey)
+export async function storePairSecretKey(secretKey: Uint8Array): Promise<void> {
+  const { encrypted, key, iv } = await encryptPrivateKey(secretKey)
   const createdAt = Date.now()
-  const integrityTag = await computePairIntegrityTag(localPadId, remotePadId, fingerprint, createdAt, iv, encrypted)
 
   const db = await initPairDB()
-  const transaction = db.transaction([STORE_NAME], 'readwrite')
-  const store = transaction.objectStore(STORE_NAME)
+  const transaction = db.transaction([SECRET_KEY_STORE], 'readwrite')
+  const store = transaction.objectStore(SECRET_KEY_STORE)
+
+  const data: PairSecretKeyData = {
+    encryptedKey: encrypted,
+    aesKey: key,
+    iv,
+    createdAt
+  }
+
+  return new Promise((resolve, reject) => {
+    const request = store.put(data, 'current')
+
+    const cleanup = () => {
+      transaction.oncomplete = null
+      transaction.onerror = null
+      transaction.onabort = null
+      request.onerror = null
+    }
+
+    transaction.oncomplete = () => {
+      cleanup()
+      resolve()
+    }
+
+    transaction.onerror = () => {
+      cleanup()
+      reject(transaction.error)
+    }
+
+    transaction.onabort = () => {
+      cleanup()
+      reject(new Error('Transaction aborted'))
+    }
+
+    request.onerror = () => {
+      cleanup()
+      reject(request.error)
+    }
+  })
+}
+
+export async function getDecryptedPairSecretKey(): Promise<Uint8Array | null> {
+  const db = await initPairDB()
+  const transaction = db.transaction([SECRET_KEY_STORE], 'readonly')
+  const store = transaction.objectStore(SECRET_KEY_STORE)
+
+  const data: PairSecretKeyData | undefined = await new Promise((resolve, reject) => {
+    const request = store.get('current')
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+
+  if (!data) return null
+
+  try {
+    return await decryptPrivateKey(data.encryptedKey, data.aesKey, data.iv)
+  } catch (error) {
+    console.error('Failed to decrypt pair secret key:', error)
+    return null
+  }
+}
+
+export async function hasPairSecretKey(): Promise<boolean> {
+  const db = await initPairDB()
+  const transaction = db.transaction([SECRET_KEY_STORE], 'readonly')
+  const store = transaction.objectStore(SECRET_KEY_STORE)
+
+  return new Promise((resolve, reject) => {
+    const request = store.count('current')
+    request.onsuccess = () => resolve(request.result > 0)
+    request.onerror = () => reject(request.error)
+  })
+}
+
+export async function clearPairSecretKey(): Promise<void> {
+  const db = await initPairDB()
+  const transaction = db.transaction([SECRET_KEY_STORE], 'readwrite')
+  const store = transaction.objectStore(SECRET_KEY_STORE)
+
+  return new Promise((resolve, reject) => {
+    const request = store.delete('current')
+
+    const cleanup = () => {
+      transaction.oncomplete = null
+      transaction.onerror = null
+      transaction.onabort = null
+      request.onerror = null
+    }
+
+    transaction.oncomplete = () => {
+      cleanup()
+      resolve()
+    }
+
+    transaction.onerror = () => {
+      cleanup()
+      reject(transaction.error)
+    }
+
+    transaction.onabort = () => {
+      cleanup()
+      reject(new Error('Transaction aborted'))
+    }
+
+    request.onerror = () => {
+      cleanup()
+      reject(request.error)
+    }
+  })
+}
+
+export async function createPairSession(localPadId: string, remotePadId: string, pairCode: string, role: 1 | 2): Promise<void> {
+  const createdAt = Date.now()
+
+  const db = await initPairDB()
+  const transaction = db.transaction([SESSIONS_STORE], 'readwrite')
+  const store = transaction.objectStore(SESSIONS_STORE)
 
   const data: PairSessionData = {
     localPadId,
     remotePadId,
-    fingerprint,
-    encryptedLocalSecretKey: encrypted,
-    aesKey: key,
-    iv,
-    createdAt,
-    integrityTag
+    pairCode,
+    role,
+    createdAt
   }
 
   return new Promise((resolve, reject) => {
@@ -141,10 +231,10 @@ export async function createPairSession(localPadId: string, localSecretKey: Uint
   })
 }
 
-export async function getDecryptedPairSession(localPadId: string): Promise<{ localSecretKey: Uint8Array, localPublicKey: string, remotePadId: string, fingerprint: string } | null> {
+export async function getDecryptedPairSession(localPadId: string): Promise<{ localSecretKey: Uint8Array, localPublicKey: string, remotePadId: string, pairCode: string } | null> {
   const db = await initPairDB()
-  const transaction = db.transaction([STORE_NAME], 'readonly')
-  const store = transaction.objectStore(STORE_NAME)
+  const transaction = db.transaction([SESSIONS_STORE], 'readonly')
+  const store = transaction.objectStore(SESSIONS_STORE)
 
   const session: PairSessionData | undefined = await new Promise((resolve, reject) => {
     const request = store.get(localPadId)
@@ -154,33 +244,22 @@ export async function getDecryptedPairSession(localPadId: string): Promise<{ loc
 
   if (!session) return null
 
-  // Verify integrity (covers remotePadId + fingerprint)
-  if (!session.integrityTag || !session.createdAt) return null
-  const computed = await computePairIntegrityTag(
-    session.localPadId, session.remotePadId, session.fingerprint,
-    session.createdAt, session.iv, session.encryptedLocalSecretKey
-  )
-  if (computed.length !== session.integrityTag.length) return null
-  let diff = 0
-  for (let i = 0; i < computed.length; i++) {
-    diff |= computed[i] ^ session.integrityTag[i]
-  }
-  if (diff !== 0) return null
+  const secretKey = await getDecryptedPairSecretKey()
+  if (!secretKey) return null
 
   try {
-    const localSecretKey = await decryptPrivateKey(session.encryptedLocalSecretKey, session.aesKey, session.iv)
-    const localPublicKey = getPublicKey(localSecretKey)
-    return { localSecretKey, localPublicKey, remotePadId: session.remotePadId, fingerprint: session.fingerprint }
+    const { localSecretKey, localPublicKey } = derivePairKeys(secretKey, session.pairCode, session.role)
+    return { localSecretKey, localPublicKey, remotePadId: session.remotePadId, pairCode: session.pairCode }
   } catch (error) {
-    console.error('Failed to decrypt pair session:', error)
+    console.error('Failed to derive pair session keys:', error)
     return null
   }
 }
 
 export async function clearPairSession(localPadId: string): Promise<void> {
   const db = await initPairDB()
-  const transaction = db.transaction([STORE_NAME], 'readwrite')
-  const store = transaction.objectStore(STORE_NAME)
+  const transaction = db.transaction([SESSIONS_STORE], 'readwrite')
+  const store = transaction.objectStore(SESSIONS_STORE)
 
   return new Promise((resolve, reject) => {
     const request = store.delete(localPadId)
@@ -216,8 +295,8 @@ export async function clearPairSession(localPadId: string): Promise<void> {
 
 export async function listPairSessions(): Promise<PairSessionMetadata[]> {
   const db = await initPairDB()
-  const transaction = db.transaction([STORE_NAME], 'readonly')
-  const store = transaction.objectStore(STORE_NAME)
+  const transaction = db.transaction([SESSIONS_STORE], 'readonly')
+  const store = transaction.objectStore(SESSIONS_STORE)
 
   return new Promise((resolve, reject) => {
     const results: PairSessionMetadata[] = []
@@ -229,7 +308,7 @@ export async function listPairSessions(): Promise<PairSessionMetadata[]> {
         const data = cursor.value as PairSessionData
         results.push({
           localPadId: data.localPadId,
-          fingerprint: data.fingerprint,
+          pairCode: data.pairCode,
           createdAt: data.createdAt
         })
         cursor.continue()

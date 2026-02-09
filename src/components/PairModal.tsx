@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
-import { generatePairSecret, isValidPairSecret, derivePairKeys, computePairFingerprint } from '../lib/keys'
-import { createPairSession } from '../lib/pairSessionStorage'
+import { generatePairCode, isValidPairCode, derivePairKeys } from '../lib/keys'
+import { getDecryptedPairSecretKey, createPairSession } from '../lib/pairSessionStorage'
 import { navigateTo } from '../lib/navigation'
-import { ALPHABET, PAIR_SECRET_LENGTH } from '../lib/constants'
+import { PAIR_CODE_LENGTH } from '../lib/constants'
 
 interface PairModalProps {
   onClose: () => void
@@ -10,8 +10,8 @@ interface PairModalProps {
 
 export function PairModal({ onClose }: PairModalProps) {
   const [tab, setTab] = useState<'create' | 'join'>('create')
-  const [generatedSecret, setGeneratedSecret] = useState<string | null>(null)
-  const [copiedSecret, setCopiedSecret] = useState(false)
+  const [generatedCode, setGeneratedCode] = useState<string | null>(null)
+  const [copiedCode, setCopiedCode] = useState(false)
   const [joinInput, setJoinInput] = useState('')
   const [error, setError] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
@@ -24,28 +24,34 @@ export function PairModal({ onClose }: PairModalProps) {
   }, [tab])
 
   const handleGenerate = () => {
-    setGeneratedSecret(generatePairSecret())
-    setCopiedSecret(false)
+    setGeneratedCode(generatePairCode())
+    setCopiedCode(false)
   }
 
-  const handleCopySecret = async () => {
-    if (!generatedSecret) return
+  const handleCopyCode = async () => {
+    if (!generatedCode) return
     try {
-      await navigator.clipboard.writeText(generatedSecret)
-      setCopiedSecret(true)
-      setTimeout(() => setCopiedSecret(false), 2000)
+      await navigator.clipboard.writeText(generatedCode)
+      setCopiedCode(true)
+      setTimeout(() => setCopiedCode(false), 2000)
     } catch (err) {
       console.error('Failed to copy:', err)
     }
   }
 
   const handleStartCreator = async () => {
-    if (!generatedSecret || isProcessing) return
+    if (!generatedCode || isProcessing) return
     setIsProcessing(true)
     try {
-      const { localSecretKey, localPadId, remotePadId } = derivePairKeys(generatedSecret, 1)
-      const fingerprint = computePairFingerprint(generatedSecret)
-      await createPairSession(localPadId, localSecretKey, remotePadId, fingerprint)
+      const sk = await getDecryptedPairSecretKey()
+      if (!sk) {
+        setError('Secret key not found. Please set up your secret key from the home screen.')
+        setIsProcessing(false)
+        return
+      }
+      const { localSecretKey, localPadId, remotePadId } = derivePairKeys(sk, generatedCode, 1)
+      void localSecretKey
+      await createPairSession(localPadId, remotePadId, generatedCode, 1)
       navigateTo('/p/' + localPadId)
       onClose()
     } catch (err) {
@@ -55,29 +61,32 @@ export function PairModal({ onClose }: PairModalProps) {
     }
   }
 
-  const validateSecret = (secret: string): string | null => {
-    if (!secret) return 'Please enter a pair key'
-    if (secret.length !== PAIR_SECRET_LENGTH) return `Key must be ${PAIR_SECRET_LENGTH} characters (got ${secret.length})`
-    for (const ch of secret) {
-      if (!ALPHABET.includes(ch)) return `Invalid character: "${ch}"`
-    }
-    if (!isValidPairSecret(secret)) return 'Invalid key (checksum mismatch — check for typos)'
+  const validateCode = (code: string): string | null => {
+    if (!code) return 'Please enter a pair code'
+    if (code.length !== PAIR_CODE_LENGTH) return `Code must be ${PAIR_CODE_LENGTH} characters (got ${code.length})`
+    if (!isValidPairCode(code)) return 'Invalid pair code (checksum mismatch — check for typos)'
     return null
   }
 
   const handleJoin = async () => {
     if (isProcessing) return
-    const secret = joinInput.trim()
-    const validationError = validateSecret(secret)
+    const code = joinInput.trim()
+    const validationError = validateCode(code)
     if (validationError) {
       setError(validationError)
       return
     }
     setIsProcessing(true)
     try {
-      const { localSecretKey, localPadId, remotePadId } = derivePairKeys(secret, 2)
-      const fingerprint = computePairFingerprint(secret)
-      await createPairSession(localPadId, localSecretKey, remotePadId, fingerprint)
+      const sk = await getDecryptedPairSecretKey()
+      if (!sk) {
+        setError('Secret key not found. Please set up your secret key from the home screen.')
+        setIsProcessing(false)
+        return
+      }
+      const { localSecretKey, localPadId, remotePadId } = derivePairKeys(sk, code, 2)
+      void localSecretKey
+      await createPairSession(localPadId, remotePadId, code, 2)
       navigateTo('/p/' + localPadId)
       onClose()
     } catch (err) {
@@ -116,25 +125,25 @@ export function PairModal({ onClose }: PairModalProps) {
 
         {tab === 'create' && (
           <div className="space-y-4">
-            {!generatedSecret ? (
+            {!generatedCode ? (
               <button
                 onClick={handleGenerate}
                 className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-4 rounded transition-colors"
               >
-                Generate Key
+                Generate Code
               </button>
             ) : (
               <>
                 <div className="bg-gray-900 p-4 rounded flex items-center justify-between gap-2">
-                  <code className="text-sm font-mono text-purple-300 break-all select-all">{generatedSecret}</code>
+                  <code className="text-sm font-mono text-purple-300 break-all select-all">{generatedCode}</code>
                   <button
-                    onClick={handleCopySecret}
+                    onClick={handleCopyCode}
                     className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm transition-colors shrink-0"
                   >
-                    {copiedSecret ? 'Copied!' : 'Copy'}
+                    {copiedCode ? 'Copied!' : 'Copy'}
                   </button>
                 </div>
-                <p className="text-gray-400 text-sm">Share this key with your partner, then click Start.</p>
+                <p className="text-gray-400 text-sm">Share this code with your partner, then click Start.</p>
                 {error && <p className="text-red-400 text-xs">{error}</p>}
                 <button
                   onClick={handleStartCreator}
@@ -152,7 +161,7 @@ export function PairModal({ onClose }: PairModalProps) {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Enter pair key
+                Enter pair code
               </label>
               <input
                 ref={joinInputRef}
@@ -160,9 +169,9 @@ export function PairModal({ onClose }: PairModalProps) {
                 value={joinInput}
                 onChange={(e) => { setJoinInput(e.target.value); setError('') }}
                 onKeyDown={handleKeyDown}
-                placeholder={`${PAIR_SECRET_LENGTH}-character key`}
+                placeholder={`${PAIR_CODE_LENGTH}-character code`}
                 className="w-full px-3 py-2 bg-gray-700 text-gray-100 rounded text-sm font-mono placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                maxLength={PAIR_SECRET_LENGTH}
+                maxLength={PAIR_CODE_LENGTH}
               />
               {error && <p className="text-red-400 text-xs mt-1">{error}</p>}
             </div>

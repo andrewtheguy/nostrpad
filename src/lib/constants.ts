@@ -25,12 +25,13 @@ export const MAX_CONTENT_LENGTH = 16000
 // Excludes 0, O, I, l, 1 for unambiguous characters
 export const ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz-_'
 
-// Pair secret: 22 data chars + 2 checksum chars = 24 total
-// Uses full ALPHABET (59 chars, prime) for ~129 bits entropy
-export const PAIR_SECRET_DATA_LENGTH = 22
-export const PAIR_SECRET_CHECKSUM_LENGTH = 2
-export const PAIR_SECRET_LENGTH = 24
+// Pair code: 5 data chars + 1 checksum char = 6 total
+// Uses 29-char alphabet (prime) for short channel identifiers
+export const PAIR_CODE_ALPHABET = '23456789abcdefghjkmnpqrstvwxy'
+export const PAIR_CODE_LENGTH = 6
 
-// Pair fingerprint: sha256 prefix encoded to Base59 for visual identification
-export const PAIR_FINGERPRINT_BYTES = 4
-export const PAIR_FINGERPRINT_LENGTH = 6
+// Secret key encoding: 59-char alphabet (prime), 44 data + 2 checksum = 46 total
+export const SECRET_KEY_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz-.,'
+export const SECRET_KEY_DATA_LENGTH = 44
+export const SECRET_KEY_CHECKSUM_LENGTH = 2
+export const SECRET_KEY_ENCODED_LENGTH = 46
