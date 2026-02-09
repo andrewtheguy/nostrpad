@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { generateSecretKey } from 'nostr-tools/pure'
 import { encodeSecretKey, decodeSecretKey, isValidSecretKeyEncoding } from '../../lib/keys'
 import { storePairSecretKey, getPairSecretKey } from '../../lib/pairSessionStorage'
@@ -16,6 +16,13 @@ export function PairKeySetup({ onComplete, onBack }: PairKeySetupProps) {
   const [importInput, setImportInput] = useState('')
   const [error, setError] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+    }
+  }, [])
 
   const handleCreateNewKey = () => {
     setError('')
@@ -35,7 +42,11 @@ export function PairKeySetup({ onComplete, onBack }: PairKeySetupProps) {
     try {
       await navigator.clipboard.writeText(generatedEncodedKey)
       setCopiedKey(true)
-      setTimeout(() => setCopiedKey(false), 2000)
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+      copyTimeoutRef.current = setTimeout(() => {
+        setCopiedKey(false)
+        copyTimeoutRef.current = null
+      }, 2000)
     } catch (err) {
       console.error('Failed to copy:', err)
     }
