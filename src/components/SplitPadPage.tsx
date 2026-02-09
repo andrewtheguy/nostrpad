@@ -94,9 +94,11 @@ export function SplitPadPage({ pairCode }: SplitPadPageProps) {
   }
 
   const [pasteStatus, setPasteStatus] = useState<'idle' | 'pasted' | 'empty'>('idle')
+  const [sendReadOnly, setSendReadOnly] = useState(false)
 
   const handleClearContent = () => {
     local.setContent('')
+    setSendReadOnly(false)
   }
 
   const handlePaste = useCallback(async () => {
@@ -108,6 +110,7 @@ export function SplitPadPage({ pairCode }: SplitPadPageProps) {
         return
       }
       local.setContent(text)
+      setSendReadOnly(true)
       setPasteStatus('pasted')
       setTimeout(() => setPasteStatus('idle'), 1000)
     } catch (error) {
@@ -186,11 +189,13 @@ export function SplitPadPage({ pairCode }: SplitPadPageProps) {
             onPaste={handlePaste}
             onClear={handleClearContent}
             pasteStatus={pasteStatus}
+            readOnly={sendReadOnly}
+            onReadOnlyChange={setSendReadOnly}
           />
           <Editor
             content={local.content}
             onChange={local.setContent}
-            readOnly={!local.canEdit || local.isLoadingContent}
+            readOnly={!local.canEdit || local.isLoadingContent || sendReadOnly}
           />
         </div>
         {/* Receive pane (remote, read-only) */}
