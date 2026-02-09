@@ -16,6 +16,7 @@ export function PairKeySetup({ onComplete, onBack }: PairKeySetupProps) {
   const [importInput, setImportInput] = useState('')
   const [error, setError] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
+  const [showSecret, setShowSecret] = useState(false)
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -143,16 +144,25 @@ export function PairKeySetup({ onComplete, onBack }: PairKeySetupProps) {
           <p className="text-gray-300 mb-4">
             Enter your {SECRET_KEY_ENCODED_LENGTH}-character secret key to import it.
           </p>
-          <input
-            type="text"
-            value={importInput}
-            onChange={(e) => { setImportInput(e.target.value); setError('') }}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleImport() }}
-            placeholder={`${SECRET_KEY_ENCODED_LENGTH}-character secret key`}
-            className="w-full px-3 py-2 bg-gray-700 text-gray-100 rounded text-sm font-mono placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 mb-4"
-            maxLength={SECRET_KEY_ENCODED_LENGTH}
-            autoFocus
-          />
+          <div className="relative mb-4">
+            <input
+              type={showSecret ? 'text' : 'password'}
+              value={importInput}
+              onChange={(e) => { setImportInput(e.target.value); setError('') }}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleImport() }}
+              placeholder={`${SECRET_KEY_ENCODED_LENGTH}-character secret key`}
+              className="w-full px-3 py-2 pr-16 bg-gray-700 text-gray-100 rounded text-sm font-mono placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              maxLength={SECRET_KEY_ENCODED_LENGTH}
+              autoFocus
+            />
+            <button
+              type="button"
+              onClick={() => setShowSecret(s => !s)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-0.5 text-xs text-gray-400 hover:text-white transition-colors"
+            >
+              {showSecret ? 'Hide' : 'Show'}
+            </button>
+          </div>
           {error && <p className="text-red-400 text-xs mb-2">{error}</p>}
           <div className="flex gap-3">
             <button

@@ -55,6 +55,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
   const [lastSessionCreatedAt, setLastSessionCreatedAt] = useState<number>(0)
   const [sessionEndedByRemote, setSessionEndedByRemote] = useState(false)
   const [pairFingerprint, setPairFingerprint] = useState<string | null>(null)
+  const [resumeError, setResumeError] = useState('')
 
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -213,8 +214,6 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
       }
     }
   }
-
-  const [resumeError, setResumeError] = useState('')
 
   const handleResumeLastSession = async () => {
     if (!lastSessionPadId) return

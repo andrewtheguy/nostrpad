@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { startNewPair, joinExistingPair } from '../../lib/pairActions'
 import { listPairSessions, clearPairSession, clearPairSecretKey } from '../../lib/pairSessionStorage'
 import { navigateTo } from '../../lib/navigation'
@@ -17,7 +17,6 @@ export function PairActions({ fingerprint, onSessionStarted, onClearKey, onBack 
   const [joinInput, setJoinInput] = useState('')
   const [error, setError] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
-  const joinInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     listPairSessions().then(setPairSessions).catch(console.error)
@@ -98,7 +97,6 @@ export function PairActions({ fingerprint, onSessionStarted, onClearKey, onBack 
           </label>
           <div className="flex gap-2">
             <input
-              ref={joinInputRef}
               type="text"
               value={joinInput}
               onChange={(e) => { setJoinInput(e.target.value); setError('') }}
