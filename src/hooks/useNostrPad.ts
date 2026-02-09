@@ -28,6 +28,7 @@ interface UseNostrPadReturn {
   isDiscovering: boolean
   isLoadingContent: boolean
   hasReceivedEvent: boolean
+  isSubscriptionReady: boolean
 }
 
 export function useNostrPad({ padId, publicKey, secretKey, contentKey, sessionCreatedAt, onLogoutSignal, isBlocked = false }: UseNostrPadOptions): UseNostrPadReturn {
@@ -38,6 +39,7 @@ export function useNostrPad({ padId, publicKey, secretKey, contentKey, sessionCr
   const [foundPublicKey, setFoundPublicKey] = useState<string | null>(publicKey || null)
   const [isLoadingContent, setIsLoadingContent] = useState(secretKey !== null)
   const [hasReceivedEvent, setHasReceivedEvent] = useState(false)
+  const [isSubscriptionReady, setIsSubscriptionReady] = useState(false)
 
   const poolRef = useRef<SimplePool | null>(null)
   const latestEventRef = useRef<Event | null>(null)
@@ -128,6 +130,7 @@ export function useNostrPad({ padId, publicKey, secretKey, contentKey, sessionCr
     setIsSaving(false)
     setIsLoadingContent(canEdit) // true if edit mode (need to fetch), false otherwise
     setHasReceivedEvent(false)
+    setIsSubscriptionReady(false)
     latestEventRef.current = null
     latestTimestampRef.current = 0
     latestTextRef.current = ''
@@ -218,6 +221,7 @@ export function useNostrPad({ padId, publicKey, secretKey, contentKey, sessionCr
       onevent: handleEvent,
       oneose: () => {
         setRelayStatus(new Map(pool.listConnectionStatus()))
+        setIsSubscriptionReady(true)
       }
     })
 
@@ -318,6 +322,7 @@ export function useNostrPad({ padId, publicKey, secretKey, contentKey, sessionCr
     foundPublicKey,
     isDiscovering,
     isLoadingContent,
-    hasReceivedEvent
+    hasReceivedEvent,
+    isSubscriptionReady
   }
 }

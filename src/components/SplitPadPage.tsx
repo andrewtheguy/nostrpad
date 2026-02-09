@@ -257,14 +257,14 @@ export function SplitPadPage({ pairCode }: SplitPadPageProps) {
               {copiedRemote ? 'Copied!' : 'Copy'}
             </button>
           </div>
-          {remote.hasReceivedEvent ? (
+          {!remote.isSubscriptionReady && !remote.hasReceivedEvent ? (
+            <WaitingForPartner pairCode={pairCode} />
+          ) : (
             <Editor
               content={remote.content}
               onChange={() => {}}
               readOnly
             />
-          ) : (
-            <WaitingForPartner pairCode={pairCode} />
           )}
         </div>
       </div>
