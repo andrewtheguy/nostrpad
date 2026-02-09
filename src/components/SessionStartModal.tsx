@@ -178,7 +178,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     setShowSecretError('')
     try {
       await createAndStoreSession(newPadData.padId, decode(newPadData.secret))
-      navigateTo('/s/' + newPadData.padId + '/rw')
+      navigateTo('/s#' + newPadData.padId + ':rw')
       onSessionStarted()
     } catch (error) {
       console.error('Failed to store session:', error)
@@ -228,7 +228,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
       const sessionTimestamp = (logoutEvent.created_at * 1000) + 1000
 
       await createAndStoreSession(padId, secretKey, sessionTimestamp)
-      navigateTo('/s/' + padId + '/rw')
+      navigateTo('/s#' + padId + ':rw')
       onSessionStarted()
     } catch (error) {
       console.error('Failed to import session:', error)
@@ -262,7 +262,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
         return
       }
 
-      navigateTo('/s/' + lastSessionPadId + '/rw')
+      navigateTo('/s#' + lastSessionPadId + ':rw')
       onSessionStarted()
     } catch (error) {
       console.error('Failed to validate session:', error)
@@ -377,7 +377,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
       }
       const { localPadId, remotePadId } = await derivePairKeys(result.hmacKey, generatedCode, 1)
       await createPairSession(localPadId, remotePadId, generatedCode, 1)
-      navigateTo('/p/' + localPadId)
+      navigateTo('/p/' + generatedCode)
       onSessionStarted()
     } catch (err) {
       console.error('Failed to start pair session:', err)
@@ -411,7 +411,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
       }
       const { localPadId, remotePadId } = await derivePairKeys(result.hmacKey, code, 2)
       await createPairSession(localPadId, remotePadId, code, 2)
-      navigateTo('/p/' + localPadId)
+      navigateTo('/p/' + code)
       onSessionStarted()
     } catch (err) {
       console.error('Failed to join pair session:', err)
@@ -741,7 +741,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
               <h3 className="text-sm font-medium text-gray-400 mb-2">Saved Pair Sessions</h3>
               <div className="space-y-2">
                 {pairSessions.map((ps) => (
-                  <div key={ps.localPadId} className="flex items-center justify-between bg-gray-700 rounded px-3 py-2">
+                  <div key={ps.pairCode} className="flex items-center justify-between bg-gray-700 rounded px-3 py-2">
                     <div>
                       <span className="text-sm font-mono text-purple-300">[{ps.pairCode}]</span>
                       <span className="text-xs text-gray-400 ml-2">
@@ -751,7 +751,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
                     <div className="flex gap-2">
                       <button
                         onClick={() => {
-                          navigateTo('/p/' + ps.localPadId)
+                          navigateTo('/p/' + ps.pairCode)
                           onSessionStarted()
                         }}
                         className="px-2 py-1 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
@@ -760,8 +760,8 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
                       </button>
                       <button
                         onClick={async () => {
-                          await clearPairSession(ps.localPadId)
-                          setPairSessions(prev => prev.filter(s => s.localPadId !== ps.localPadId))
+                          await clearPairSession(ps.pairCode)
+                          setPairSessions(prev => prev.filter(s => s.pairCode !== ps.pairCode))
                         }}
                         className="px-2 py-1 text-xs bg-gray-600 hover:bg-gray-500 text-gray-300 rounded transition-colors"
                       >

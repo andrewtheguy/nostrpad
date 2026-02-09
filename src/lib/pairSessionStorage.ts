@@ -2,7 +2,7 @@ import { derivePairKeys } from './keys'
 import { encodeFixed } from './encoding'
 
 const DB_NAME = 'nostrpad-pair-sessions'
-const DB_VERSION = 4
+const DB_VERSION = 5
 const SECRET_KEY_STORE = 'pairSecretKey'
 const SESSIONS_STORE = 'pairSessions'
 
@@ -14,6 +14,7 @@ let cachedDb: IDBDatabase | Promise<IDBDatabase> | null = null
 
 interface PairSecretKeyData {
   hmacKey: CryptoKey        // non-extractable HMAC-SHA256
+  hkdfKey: CryptoKey        // non-extractable HKDF base key for content encryption
   fingerprint: string       // 11-char base59 string
   createdAt: number
   integrityTag: Uint8Array  // SHA-256(fingerprint + createdAt)
@@ -28,7 +29,6 @@ interface PairSessionData {
 }
 
 export interface PairSessionMetadata {
-  localPadId: string
   pairCode: string
   createdAt: number
 }
@@ -130,6 +130,13 @@ export async function storePairSecretKey(secretKey: Uint8Array): Promise<void> {
     false, // non-extractable
     ['sign']
   )
+  const hkdfKey = await crypto.subtle.importKey(
+    'raw',
+    secretKey as BufferSource,
+    'HKDF',
+    false, // non-extractable
+    ['deriveKey']
+  )
   const createdAt = Date.now()
 
   // Compute fingerprint + integrity tag BEFORE starting the transaction
@@ -143,6 +150,7 @@ export async function storePairSecretKey(secretKey: Uint8Array): Promise<void> {
 
   const data: PairSecretKeyData = {
     hmacKey,
+    hkdfKey,
     fingerprint,
     createdAt,
     integrityTag
@@ -180,7 +188,7 @@ export async function storePairSecretKey(secretKey: Uint8Array): Promise<void> {
   })
 }
 
-export async function getPairSecretKey(): Promise<{ hmacKey: CryptoKey, fingerprint: string } | null> {
+export async function getPairSecretKey(): Promise<{ hmacKey: CryptoKey, hkdfKey: CryptoKey, fingerprint: string } | null> {
   const db = await initPairDB()
   const transaction = db.transaction([SECRET_KEY_STORE], 'readonly')
   const store = transaction.objectStore(SECRET_KEY_STORE)
@@ -196,7 +204,7 @@ export async function getPairSecretKey(): Promise<{ hmacKey: CryptoKey, fingerpr
   const { valid, fingerprint } = await verifyPairIntegrity(data)
   if (!valid) return null
 
-  return { hmacKey: data.hmacKey, fingerprint }
+  return { hmacKey: data.hmacKey, hkdfKey: data.hkdfKey, fingerprint }
 }
 
 export async function hasPairSecretKey(): Promise<boolean> {
@@ -264,7 +272,7 @@ export async function createPairSession(localPadId: string, remotePadId: string,
   }
 
   return new Promise((resolve, reject) => {
-    const request = store.put(data, localPadId)
+    const request = store.put(data, pairCode)
 
     const cleanup = () => {
       transaction.oncomplete = null
@@ -295,13 +303,21 @@ export async function createPairSession(localPadId: string, remotePadId: string,
   })
 }
 
-export async function getDecryptedPairSession(localPadId: string): Promise<{ localSecretKey: Uint8Array, localPublicKey: string, remotePadId: string, pairCode: string } | null> {
+export async function getDecryptedPairSession(pairCode: string): Promise<{
+  localSecretKey: Uint8Array
+  localPublicKey: string
+  localPadId: string
+  remotePadId: string
+  pairCode: string
+  localContentKey: CryptoKey
+  remoteContentKey: CryptoKey
+} | null> {
   const db = await initPairDB()
   const transaction = db.transaction([SESSIONS_STORE], 'readonly')
   const store = transaction.objectStore(SESSIONS_STORE)
 
   const session: PairSessionData | undefined = await new Promise((resolve, reject) => {
-    const request = store.get(localPadId)
+    const request = store.get(pairCode)
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error)
   })
@@ -314,26 +330,52 @@ export async function getDecryptedPairSession(localPadId: string): Promise<{ loc
   try {
     const derived = await derivePairKeys(result.hmacKey, session.pairCode, session.role)
 
-    if (derived.localPadId !== localPadId || derived.remotePadId !== session.remotePadId) {
+    if (derived.localPadId !== session.localPadId || derived.remotePadId !== session.remotePadId) {
       console.error('Pair session pad ID mismatch — clearing corrupt entry')
-      await clearPairSession(localPadId)
+      await clearPairSession(pairCode)
       return null
     }
 
-    return { localSecretKey: derived.localSecretKey, localPublicKey: derived.localPublicKey, remotePadId: session.remotePadId, pairCode: session.pairCode }
+    const encoder = new TextEncoder()
+    const localSide = session.role
+    const remoteSide = session.role === 1 ? 2 : 1
+
+    const localContentKey = await crypto.subtle.deriveKey(
+      { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0),
+        info: encoder.encode(`nostrpad-pair-content:${pairCode}:${localSide}`) },
+      result.hkdfKey,
+      { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+    )
+
+    const remoteContentKey = await crypto.subtle.deriveKey(
+      { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0),
+        info: encoder.encode(`nostrpad-pair-content:${pairCode}:${remoteSide}`) },
+      result.hkdfKey,
+      { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+    )
+
+    return {
+      localSecretKey: derived.localSecretKey,
+      localPublicKey: derived.localPublicKey,
+      localPadId: derived.localPadId,
+      remotePadId: session.remotePadId,
+      pairCode: session.pairCode,
+      localContentKey,
+      remoteContentKey
+    }
   } catch (error) {
     console.error('Failed to derive pair session keys:', error)
     return null
   }
 }
 
-export async function clearPairSession(localPadId: string): Promise<void> {
+export async function clearPairSession(pairCode: string): Promise<void> {
   const db = await initPairDB()
   const transaction = db.transaction([SESSIONS_STORE], 'readwrite')
   const store = transaction.objectStore(SESSIONS_STORE)
 
   return new Promise((resolve, reject) => {
-    const request = store.delete(localPadId)
+    const request = store.delete(pairCode)
 
     const cleanup = () => {
       transaction.oncomplete = null
@@ -378,7 +420,6 @@ export async function listPairSessions(): Promise<PairSessionMetadata[]> {
       if (cursor) {
         const data = cursor.value as PairSessionData
         results.push({
-          localPadId: data.localPadId,
           pairCode: data.pairCode,
           createdAt: data.createdAt
         })
