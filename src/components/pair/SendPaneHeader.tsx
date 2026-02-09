@@ -1,4 +1,5 @@
 let _deviceLabel: string | null = null
+// no server side rendering support, otherwise will need to refactor
 function getDeviceLabel(): string {
   if (_deviceLabel) return _deviceLabel
   if (typeof navigator === 'undefined') return 'Unknown'
