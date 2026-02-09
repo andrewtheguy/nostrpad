@@ -17,6 +17,12 @@ export function WaitingForPartner({ pairCode }: WaitingForPartnerProps) {
     }
   }, [])
 
+  useEffect(() => {
+    if (copyStatus === 'failed') {
+      codeInputRef.current?.select()
+    }
+  }, [copyStatus])
+
   const resetStatus = (delay: number) => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
     timeoutRef.current = setTimeout(() => {
@@ -30,10 +36,6 @@ export function WaitingForPartner({ pairCode }: WaitingForPartnerProps) {
       setCopyStatus('copied')
       resetStatus(2000)
     } catch {
-      // Fallback: select the hidden input so the user can Ctrl+C / Cmd+C
-      if (codeInputRef.current) {
-        codeInputRef.current.select()
-      }
       setCopyStatus('failed')
       resetStatus(3000)
     }
