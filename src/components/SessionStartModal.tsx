@@ -1,15 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
-import { createNewPad } from '../lib/keys'
+import { createNewPad, generatePairSecret, isValidPairSecret, derivePairKeys, computePairFingerprint } from '../lib/keys'
 import { navigateTo } from '../lib/navigation'
 import { createAndStoreSession, getVerifiedStoredSession, clearSession } from '../lib/sessionStorage'
 import { getPublicKey } from 'nostr-tools/pure'
 import { SimplePool } from 'nostr-tools/pool'
-import { BOOTSTRAP_RELAYS } from '../lib/constants'
+import { BOOTSTRAP_RELAYS, ALPHABET, PAIR_SECRET_LENGTH } from '../lib/constants'
 import { createLogoutEvent, publishEvent } from '../lib/nostr'
 import { decode, encodeFixed } from '../lib/encoding'
 import { PAD_ID_BYTES, PAD_ID_LENGTH } from '../lib/constants'
-import { PairModal } from './PairModal'
-import { listPairSessions, clearPairSession } from '../lib/pairSessionStorage'
+import { listPairSessions, clearPairSession, createPairSession } from '../lib/pairSessionStorage'
 import type { PairSessionMetadata } from '../lib/pairSessionStorage'
 
 // Helper function
@@ -38,10 +37,10 @@ interface SessionStartModalProps {
   onSessionStarted: () => void
 }
 
-type ModalMode = 'choice' | 'show-secret' | 'import'
+type ModalMode = 'mode-select' | 'sender-receiver' | 'show-secret' | 'import' | 'pair'
 
 export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) {
-  const [mode, setMode] = useState<ModalMode>('choice')
+  const [mode, setMode] = useState<ModalMode>('mode-select')
   const [isCreating, setIsCreating] = useState(false)
   const [importSecret, setImportSecret] = useState('')
   const [importError, setImportError] = useState('')
@@ -54,10 +53,16 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
   const [isConfirming, setIsConfirming] = useState(false)
   const [lastSessionCreatedAt, setLastSessionCreatedAt] = useState<number>(0)
   const [sessionEndedByRemote, setSessionEndedByRemote] = useState(false)
-  const [showPairModal, setShowPairModal] = useState(false)
   const [pairSessions, setPairSessions] = useState<PairSessionMetadata[]>([])
+  const [pairTab, setPairTab] = useState<'create' | 'join'>('create')
+  const [generatedPairSecret, setGeneratedPairSecret] = useState<string | null>(null)
+  const [copiedPairSecret, setCopiedPairSecret] = useState(false)
+  const [pairJoinInput, setPairJoinInput] = useState('')
+  const [pairError, setPairError] = useState('')
+  const [isPairProcessing, setIsPairProcessing] = useState(false)
 
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pairJoinInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     getVerifiedStoredSession().then(result => {
@@ -113,6 +118,12 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     }
   }, [lastSessionPadId, lastSessionCreatedAt])
 
+  useEffect(() => {
+    if (mode === 'pair' && pairTab === 'join') {
+      pairJoinInputRef.current?.focus()
+    }
+  }, [mode, pairTab])
+
   // Cleanup copy timeout on unmount
   useEffect(() => {
     const ref = copyTimeoutRef
@@ -163,7 +174,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     setShowSecretError('')
     setCopied(false)
     setCopyError(false)
-    setMode('choice')
+    setMode('sender-receiver')
   }
 
   const handleImportSession = async () => {
@@ -265,6 +276,74 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     }
   }
 
+  const handlePairGenerate = () => {
+    setGeneratedPairSecret(generatePairSecret())
+    setCopiedPairSecret(false)
+  }
+
+  const handlePairCopySecret = async () => {
+    if (!generatedPairSecret) return
+    try {
+      await navigator.clipboard.writeText(generatedPairSecret)
+      setCopiedPairSecret(true)
+      setTimeout(() => setCopiedPairSecret(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }
+
+  const handlePairStartCreator = async () => {
+    if (!generatedPairSecret || isPairProcessing) return
+    setIsPairProcessing(true)
+    try {
+      const { localSecretKey, localPadId, remotePadId } = derivePairKeys(generatedPairSecret, 1)
+      const fingerprint = computePairFingerprint(generatedPairSecret)
+      await createPairSession(localPadId, localSecretKey, remotePadId, fingerprint)
+      navigateTo('/p/' + localPadId)
+      onSessionStarted()
+    } catch (err) {
+      console.error('Failed to start pair session:', err)
+      setPairError('Failed to start pair session')
+      setIsPairProcessing(false)
+    }
+  }
+
+  const validatePairSecret = (secret: string): string | null => {
+    if (!secret) return 'Please enter a pair key'
+    if (secret.length !== PAIR_SECRET_LENGTH) return `Key must be ${PAIR_SECRET_LENGTH} characters (got ${secret.length})`
+    for (const ch of secret) {
+      if (!ALPHABET.includes(ch)) return `Invalid character: "${ch}"`
+    }
+    if (!isValidPairSecret(secret)) return 'Invalid key (checksum mismatch — check for typos)'
+    return null
+  }
+
+  const handlePairJoin = async () => {
+    if (isPairProcessing) return
+    const secret = pairJoinInput.trim()
+    const validationError = validatePairSecret(secret)
+    if (validationError) {
+      setPairError(validationError)
+      return
+    }
+    setIsPairProcessing(true)
+    try {
+      const { localSecretKey, localPadId, remotePadId } = derivePairKeys(secret, 2)
+      const fingerprint = computePairFingerprint(secret)
+      await createPairSession(localPadId, localSecretKey, remotePadId, fingerprint)
+      navigateTo('/p/' + localPadId)
+      onSessionStarted()
+    } catch (err) {
+      console.error('Failed to join pair session:', err)
+      setPairError('Failed to join pair session')
+      setIsPairProcessing(false)
+    }
+  }
+
+  const handlePairKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handlePairJoin()
+  }
+
   const copySecret = async () => {
     if (!newPadData) return
 
@@ -363,7 +442,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
           )}
           <div className="flex gap-3">
             <button
-              onClick={() => setMode('choice')}
+              onClick={() => setMode('sender-receiver')}
               className="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded transition-colors"
             >
               Back
@@ -380,55 +459,92 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     )
   }
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-gray-800 rounded-lg p-8 max-w-md w-full mx-4">
-        <h2 className="text-2xl font-bold text-white mb-4">Welcome to NostrPad</h2>
-        <p className="text-gray-300 mb-6">
-          Choose how to start your session:
-        </p>
-        {sessionEndedByRemote && (
-          <div className="bg-yellow-900/50 border border-yellow-600 rounded-lg p-3 mb-4">
-            <p className="text-yellow-200 text-sm">Your saved session was ended by another device.</p>
-          </div>
-        )}
-        {createError && (
-          <p className="text-red-400 text-sm mb-4">{createError}</p>
-        )}
-        {resumeError && (
-          <p className="text-red-400 text-sm mb-4">{resumeError}</p>
-        )}
-        <div className="space-y-3">
-          {lastSessionPadId && (
+  if (mode === 'pair') {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-gray-800 rounded-lg p-8 max-w-lg w-full mx-4">
+          <h2 className="text-2xl font-bold text-white mb-4">Pair Mode</h2>
+
+          <div className="flex gap-2 mb-4">
             <button
-              onClick={handleResumeLastSession}
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+              onClick={() => { setPairTab('create'); setPairError('') }}
+              className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${pairTab === 'create' ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
             >
-              Resume Last Session: {lastSessionPadId}
+              Create Pair
             </button>
+            <button
+              onClick={() => { setPairTab('join'); setPairError('') }}
+              className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${pairTab === 'join' ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+            >
+              Join Pair
+            </button>
+          </div>
+
+          {pairTab === 'create' && (
+            <div className="space-y-4">
+              {!generatedPairSecret ? (
+                <button
+                  onClick={handlePairGenerate}
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-4 rounded transition-colors"
+                >
+                  Generate Key
+                </button>
+              ) : (
+                <>
+                  <div className="bg-gray-900 p-4 rounded flex items-center justify-between gap-2">
+                    <code className="text-sm font-mono text-purple-300 break-all select-all">{generatedPairSecret}</code>
+                    <button
+                      onClick={handlePairCopySecret}
+                      className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm transition-colors shrink-0"
+                    >
+                      {copiedPairSecret ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                  <p className="text-gray-400 text-sm">Share this key with your partner, then click Start.</p>
+                  {pairError && <p className="text-red-400 text-xs">{pairError}</p>}
+                  <button
+                    onClick={handlePairStartCreator}
+                    disabled={isPairProcessing}
+                    className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-800 disabled:text-green-400 text-white font-medium py-3 px-4 rounded transition-colors"
+                  >
+                    {isPairProcessing ? 'Starting...' : 'Start'}
+                  </button>
+                </>
+              )}
+            </div>
           )}
-          <button
-            onClick={handleStartNewSession}
-            disabled={isCreating}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-3 px-4 rounded-lg transition-colors"
-          >
-            {isCreating ? 'Creating...' : 'Start New Session'}
-          </button>
-          <button
-            onClick={() => setMode('import')}
-            className="w-full bg-gray-600 hover:bg-gray-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
-          >
-            Import Existing Secret Key
-          </button>
-          <button
-            onClick={() => setShowPairModal(true)}
-            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
-          >
-            Pair Mode
-          </button>
+
+          {pairTab === 'join' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Enter pair key
+                </label>
+                <input
+                  ref={pairJoinInputRef}
+                  type="text"
+                  value={pairJoinInput}
+                  onChange={(e) => { setPairJoinInput(e.target.value); setPairError('') }}
+                  onKeyDown={handlePairKeyDown}
+                  placeholder={`${PAIR_SECRET_LENGTH}-character key`}
+                  className="w-full px-3 py-2 bg-gray-700 text-gray-100 rounded text-sm font-mono placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  maxLength={PAIR_SECRET_LENGTH}
+                />
+                {pairError && <p className="text-red-400 text-xs mt-1">{pairError}</p>}
+              </div>
+              <button
+                onClick={handlePairJoin}
+                disabled={isPairProcessing}
+                className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:text-purple-400 text-white font-medium py-3 px-4 rounded transition-colors"
+              >
+                {isPairProcessing ? 'Joining...' : 'Join'}
+              </button>
+            </div>
+          )}
+
           {pairSessions.length > 0 && (
-            <div className="pt-3 border-t border-gray-700">
-              <h3 className="text-sm font-medium text-gray-400 mb-2">Pair Sessions</h3>
+            <div className="pt-4 mt-4 border-t border-gray-700">
+              <h3 className="text-sm font-medium text-gray-400 mb-2">Saved Pair Sessions</h3>
               <div className="space-y-2">
                 {pairSessions.map((ps) => (
                   <div key={ps.localPadId} className="flex items-center justify-between bg-gray-700 rounded px-3 py-2">
@@ -463,14 +579,102 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
               </div>
             </div>
           )}
-          {lastSessionPadId && (
+
+          <div className="mt-6 flex justify-end">
             <button
-              onClick={handleClearSession}
-              className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm"
+              onClick={() => setMode('mode-select')}
+              className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded transition-colors"
             >
-              Clear Saved Session
+              Back
             </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (mode === 'sender-receiver') {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-gray-800 rounded-lg p-8 max-w-md w-full mx-4">
+          <h2 className="text-2xl font-bold text-white mb-4">Sender / Receiver</h2>
+          <p className="text-gray-300 mb-6">
+            Choose how to start your session:
+          </p>
+          {sessionEndedByRemote && (
+            <div className="bg-yellow-900/50 border border-yellow-600 rounded-lg p-3 mb-4">
+              <p className="text-yellow-200 text-sm">Your saved session was ended by another device.</p>
+            </div>
           )}
+          {createError && (
+            <p className="text-red-400 text-sm mb-4">{createError}</p>
+          )}
+          {resumeError && (
+            <p className="text-red-400 text-sm mb-4">{resumeError}</p>
+          )}
+          <div className="space-y-3">
+            {lastSessionPadId && (
+              <button
+                onClick={handleResumeLastSession}
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+              >
+                Resume Last Session: {lastSessionPadId}
+              </button>
+            )}
+            <button
+              onClick={handleStartNewSession}
+              disabled={isCreating}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              {isCreating ? 'Creating...' : 'Start New Session'}
+            </button>
+            <button
+              onClick={() => setMode('import')}
+              className="w-full bg-gray-600 hover:bg-gray-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              Import Existing Secret Key
+            </button>
+            {lastSessionPadId && (
+              <button
+                onClick={handleClearSession}
+                className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm"
+              >
+                Clear Saved Session
+              </button>
+            )}
+            <button
+              onClick={() => setMode('mode-select')}
+              className="w-full bg-gray-700 hover:bg-gray-600 text-gray-300 font-medium py-2 px-4 rounded-lg transition-colors text-sm"
+            >
+              Back
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // mode === 'mode-select' (default home screen)
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-gray-800 rounded-lg p-8 max-w-md w-full mx-4">
+        <h2 className="text-2xl font-bold text-white mb-4">Welcome to NostrPad</h2>
+        <p className="text-gray-300 mb-6">
+          Choose a mode to get started:
+        </p>
+        <div className="space-y-3">
+          <button
+            onClick={() => setMode('sender-receiver')}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-4 px-4 rounded-lg transition-colors text-lg"
+          >
+            Sender / Receiver
+          </button>
+          <button
+            onClick={() => setMode('pair')}
+            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-4 px-4 rounded-lg transition-colors text-lg"
+          >
+            Pair Mode
+          </button>
           <div className="pt-4 border-t border-gray-700">
             <p className="text-gray-400 text-xs italic text-center">
               Note: NostrPad is designed for temporary sharing rather than long-term storage. Sessions and data are ephemeral and may be purged periodically. Always have a backup of your data that you want to keep elsewhere.
@@ -478,9 +682,6 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
           </div>
         </div>
       </div>
-      {showPairModal && (
-        <PairModal onClose={() => setShowPairModal(false)} />
-      )}
     </div>
   )
 }
