@@ -24,3 +24,14 @@ export const MAX_CONTENT_LENGTH = 16000
 // URL-safe Base59 alphabet: standard Base58 plus '-' and '_' (59 characters)
 // Excludes 0, O, I, l, 1 for unambiguous characters
 export const ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz-_'
+
+// Pair code: 5 data chars + 1 checksum char = 6 total
+// Uses 29-char alphabet (prime) for short channel identifiers
+export const PAIR_CODE_ALPHABET = '23456789abcdefghjkmnpqrstvwxy'
+export const PAIR_CODE_LENGTH = 6
+
+// Secret key encoding: 59-char alphabet (prime), 44 data + 2 checksum = 46 total
+export const SECRET_KEY_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz-.,'
+export const SECRET_KEY_DATA_LENGTH = 44
+export const SECRET_KEY_CHECKSUM_LENGTH = 2
+export const SECRET_KEY_ENCODED_LENGTH = 46

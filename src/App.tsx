@@ -1,40 +1,55 @@
 import { useState, useEffect } from 'react'
 import { parseUrl } from './lib/keys'
 import { PadPage } from './components/PadPage'
+import { SplitPadPage } from './components/SplitPadPage'
 import { SessionStartModal } from './components/SessionStartModal'
 
 function App() {
   const [route, setRoute] = useState<{ padId: string; isEdit: boolean } | null>(null)
+  const [pairRoute, setPairRoute] = useState<{ padId: string } | null>(null)
   const [showModal, setShowModal] = useState(false)
 
   useEffect(() => {
-    const handleHashChange = () => {
-      const { padId, isEdit } = parseUrl(window.location.hash)
-
-      if (!padId) {
-        setShowModal(true)
+    const handleRouteChange = () => {
+      // 1. Check for pair mode: /p/PADID
+      const pairMatch = window.location.pathname.match(/^\/p\/([^/]+)$/)
+      if (pairMatch) {
+        setPairRoute({ padId: pairMatch[1] })
         setRoute(null)
+        setShowModal(false)
+        return
+      }
+      setPairRoute(null)
+
+      // 2. Check for pad mode: /s/PADID or /s/PADID/rw
+      const { padId, isEdit } = parseUrl(window.location.pathname)
+      if (padId) {
+        setRoute({ padId, isEdit })
+        setShowModal(false)
         return
       }
 
-      setRoute({ padId, isEdit })
-      setShowModal(false)
+      // 3. Home
+      setShowModal(true)
+      setRoute(null)
     }
 
     // Initial check
-    handleHashChange()
+    handleRouteChange()
 
-    // Listen for hash changes
-    window.addEventListener('hashchange', handleHashChange)
+    // Listen for navigation changes
+    window.addEventListener('popstate', handleRouteChange)
     return () => {
-      window.removeEventListener('hashchange', handleHashChange)
+      window.removeEventListener('popstate', handleRouteChange)
     }
   }, [])
 
-  // SessionStartModal updates window.location.hash before calling this callback,
-  // so the hashchange event will update route state. We just close the modal here.
   const handleSessionStarted = () => {
     setShowModal(false)
+  }
+
+  if (pairRoute) {
+    return <SplitPadPage padId={pairRoute.padId} />
   }
 
   if (showModal) {

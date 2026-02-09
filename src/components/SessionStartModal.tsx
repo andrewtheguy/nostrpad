@@ -1,12 +1,16 @@
 import { useState, useEffect, useRef } from 'react'
-import { createNewPad } from '../lib/keys'
+import { createNewPad, generatePairCode, isValidPairCode, derivePairKeys, encodeSecretKey, decodeSecretKey, isValidSecretKeyEncoding } from '../lib/keys'
+import { generateSecretKey } from 'nostr-tools/pure'
+import { navigateTo } from '../lib/navigation'
 import { createAndStoreSession, getVerifiedStoredSession, clearSession } from '../lib/sessionStorage'
 import { getPublicKey } from 'nostr-tools/pure'
 import { SimplePool } from 'nostr-tools/pool'
-import { BOOTSTRAP_RELAYS } from '../lib/constants'
+import { BOOTSTRAP_RELAYS, PAIR_CODE_LENGTH, SECRET_KEY_ENCODED_LENGTH } from '../lib/constants'
 import { createLogoutEvent, publishEvent } from '../lib/nostr'
 import { decode, encodeFixed } from '../lib/encoding'
 import { PAD_ID_BYTES, PAD_ID_LENGTH } from '../lib/constants'
+import { storePairSecretKey, getPairSecretKey, hasPairSecretKey, clearPairSecretKey, createPairSession, listPairSessions, clearPairSession } from '../lib/pairSessionStorage'
+import type { PairSessionMetadata } from '../lib/pairSessionStorage'
 
 // Helper function
 function hexToBytes(hex: string): Uint8Array {
@@ -34,10 +38,10 @@ interface SessionStartModalProps {
   onSessionStarted: () => void
 }
 
-type ModalMode = 'choice' | 'show-secret' | 'import'
+type ModalMode = 'mode-select' | 'sender-receiver' | 'show-secret' | 'import' | 'pair-setup' | 'pair'
 
 export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) {
-  const [mode, setMode] = useState<ModalMode>('choice')
+  const [mode, setMode] = useState<ModalMode>('mode-select')
   const [isCreating, setIsCreating] = useState(false)
   const [importSecret, setImportSecret] = useState('')
   const [importError, setImportError] = useState('')
@@ -50,12 +54,28 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
   const [isConfirming, setIsConfirming] = useState(false)
   const [lastSessionCreatedAt, setLastSessionCreatedAt] = useState<number>(0)
   const [sessionEndedByRemote, setSessionEndedByRemote] = useState(false)
+  const [pairSessions, setPairSessions] = useState<PairSessionMetadata[]>([])
+  const [pairTab, setPairTab] = useState<'create' | 'join'>('create')
+  const [generatedCode, setGeneratedCode] = useState<string | null>(null)
+  const [copiedCode, setCopiedCode] = useState(false)
+  const [pairJoinInput, setPairJoinInput] = useState('')
+  const [pairError, setPairError] = useState('')
+  const [isPairProcessing, setIsPairProcessing] = useState(false)
+  const [pairFingerprint, setPairFingerprint] = useState<string | null>(null)
+
+  // Pair setup state
+  const [pairSetupTab, setPairSetupTab] = useState<'generate' | 'import'>('generate')
+  const [generatedEncodedKey, setGeneratedEncodedKey] = useState<string | null>(null)
+  const [copiedEncodedKey, setCopiedEncodedKey] = useState(false)
+  const [pairSetupImportInput, setPairSetupImportInput] = useState('')
+  const [pairSetupError, setPairSetupError] = useState('')
+  const [isPairSetupProcessing, setIsPairSetupProcessing] = useState(false)
 
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pairJoinInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     getVerifiedStoredSession().then(result => {
-      // Only show padId if integrity verification passes
       if (result) {
         setLastSessionPadId(result.session.padId)
         setLastSessionCreatedAt(result.session.createdAt)
@@ -67,17 +87,16 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     })
   }, [])
 
+  useEffect(() => {
+    listPairSessions().then(setPairSessions).catch(console.error)
+  }, [])
+
   // Listen for logout events while on this screen
   useEffect(() => {
     if (!lastSessionPadId || !lastSessionCreatedAt) return
 
     const pool = new SimplePool()
-
-    // We need to find the relay list. We can use bootstrap relays for now as we don't have active relays discovered yet.
-    // In a real app we might want to discover first, but bootstrap is fine for the landing page check.
     const relays = BOOTSTRAP_RELAYS
-
-    // Only fetch logout events around our session creation time (with 2 min padding for clock skew)
     const since = Math.floor(lastSessionCreatedAt / 1000) - 120
 
     const sub = pool.subscribe(relays, {
@@ -86,7 +105,6 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
       since
     }, {
       onevent: (event) => {
-        // Check if this event invalidates our session
         const eventTimeMs = event.created_at * 1000
         if (eventTimeMs > lastSessionCreatedAt) {
           console.log('Session invalidated by remote device')
@@ -103,6 +121,12 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     }
   }, [lastSessionPadId, lastSessionCreatedAt])
 
+  useEffect(() => {
+    if (mode === 'pair' && pairTab === 'join') {
+      pairJoinInputRef.current?.focus()
+    }
+  }, [mode, pairTab])
+
   // Cleanup copy timeout on unmount
   useEffect(() => {
     const ref = copyTimeoutRef
@@ -112,6 +136,22 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
       }
     }
   }, [])
+
+  const handlePairModeClick = async () => {
+    try {
+      const hasKey = await hasPairSecretKey()
+      if (hasKey) {
+        const result = await getPairSecretKey()
+        setPairFingerprint(result?.fingerprint ?? null)
+        setMode('pair')
+      } else {
+        setMode('pair-setup')
+      }
+    } catch (err) {
+      console.error('Failed to check pair secret key:', err)
+      setMode('pair-setup')
+    }
+  }
 
   const handleStartNewSession = async () => {
     if (lastSessionPadId && !confirm('Starting a new session will clear your saved session. Are you sure?')) {
@@ -138,7 +178,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     setShowSecretError('')
     try {
       await createAndStoreSession(newPadData.padId, decode(newPadData.secret))
-      window.location.hash = `${newPadData.padId}:rw`
+      navigateTo('/s/' + newPadData.padId + '/rw')
       onSessionStarted()
     } catch (error) {
       console.error('Failed to store session:', error)
@@ -153,7 +193,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     setShowSecretError('')
     setCopied(false)
     setCopyError(false)
-    setMode('choice')
+    setMode('sender-receiver')
   }
 
   const handleImportSession = async () => {
@@ -174,11 +214,8 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
       const pubkeyBytes = hexToBytes(publicKey)
       const padId = encodeFixed(pubkeyBytes.slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
 
-      // 1. Create logout event
       const logoutEvent = createLogoutEvent(padId, secretKey)
 
-      // 2. Publish to relays to notify other devices
-      // We use a temporary pool here just for this action
       const pool = new SimplePool()
       try {
         await publishEvent(pool, logoutEvent)
@@ -188,17 +225,10 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
         pool.close(BOOTSTRAP_RELAYS)
       }
 
-      // 3. Store new session
-      // Ensure session timestamp is strictly greater than event timestamp to avoid self-logout
-      // event.created_at is in seconds floor. 
-      // We use Date.now() which is ms. 
-      // Ideally wait 1s or just add 1000ms to ensure safety margin if clocks are weird?
-      // Actually standard Date.now() > event.created_at * 1000 is usually true if done after.
-      // Let's add 1000ms to be safe against clock skew/rounding.
       const sessionTimestamp = (logoutEvent.created_at * 1000) + 1000
 
       await createAndStoreSession(padId, secretKey, sessionTimestamp)
-      window.location.hash = `${padId}:rw`
+      navigateTo('/s/' + padId + '/rw')
       onSessionStarted()
     } catch (error) {
       console.error('Failed to import session:', error)
@@ -217,10 +247,8 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     setResumeError('')
 
     try {
-      // Re-validate session with integrity check
       const result = await getVerifiedStoredSession()
       if (!result || result.session.padId !== lastSessionPadId) {
-        // Session no longer exists, padId mismatch, or integrity check failed
         setLastSessionPadId(null)
         setResumeError('Session no longer exists or has been tampered with. Please start a new session or import your secret key.')
         return
@@ -228,14 +256,13 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
 
       const { session } = result
 
-      // Validate session data is not corrupted
       if (!session.encryptedPrivateKey || !session.aesKey || !session.iv) {
         setLastSessionPadId(null)
         setResumeError('Session data is corrupted. Please start a new session or import your secret key.')
         return
       }
 
-      window.location.hash = `${lastSessionPadId}:rw`
+      navigateTo('/s/' + lastSessionPadId + '/rw')
       onSessionStarted()
     } catch (error) {
       console.error('Failed to validate session:', error)
@@ -255,23 +282,173 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     }
   }
 
+  // Pair setup: Generate
+  const handlePairSetupGenerate = async () => {
+    setIsPairSetupProcessing(true)
+    setPairSetupError('')
+    try {
+      const sk = generateSecretKey()
+      const encoded = encodeSecretKey(sk)
+      setGeneratedEncodedKey(encoded)
+      setCopiedEncodedKey(false)
+    } catch (err) {
+      console.error('Failed to generate secret key:', err)
+      setPairSetupError('Failed to generate secret key')
+    } finally {
+      setIsPairSetupProcessing(false)
+    }
+  }
+
+  const handlePairSetupConfirmGenerate = async () => {
+    if (!generatedEncodedKey) return
+    setIsPairSetupProcessing(true)
+    setPairSetupError('')
+    try {
+      const sk = decodeSecretKey(generatedEncodedKey)
+      await storePairSecretKey(sk)
+      setGeneratedEncodedKey(null)
+      setPairSessions(await listPairSessions())
+      const result = await getPairSecretKey()
+      setPairFingerprint(result?.fingerprint ?? null)
+      setMode('pair')
+    } catch (err) {
+      console.error('Failed to store pair secret key:', err)
+      setPairSetupError('Failed to store secret key')
+    } finally {
+      setIsPairSetupProcessing(false)
+    }
+  }
+
+  // Pair setup: Import
+  const handlePairSetupImport = async () => {
+    const input = pairSetupImportInput.trim()
+    setPairSetupError('')
+    if (!input) {
+      setPairSetupError('Please enter a secret key')
+      return
+    }
+    if (!isValidSecretKeyEncoding(input)) {
+      setPairSetupError('Invalid secret key (check length, characters, and checksum)')
+      return
+    }
+    setIsPairSetupProcessing(true)
+    try {
+      const sk = decodeSecretKey(input)
+      await storePairSecretKey(sk)
+      setPairSetupImportInput('')
+      setPairSessions(await listPairSessions())
+      const result = await getPairSecretKey()
+      setPairFingerprint(result?.fingerprint ?? null)
+      setMode('pair')
+    } catch (err) {
+      console.error('Failed to import pair secret key:', err)
+      setPairSetupError('Failed to import secret key')
+    } finally {
+      setIsPairSetupProcessing(false)
+    }
+  }
+
+  // Pair: Create
+  const handlePairGenerate = () => {
+    setGeneratedCode(generatePairCode())
+    setCopiedCode(false)
+  }
+
+  const handlePairCopyCode = async () => {
+    if (!generatedCode) return
+    try {
+      await navigator.clipboard.writeText(generatedCode)
+      setCopiedCode(true)
+      setTimeout(() => setCopiedCode(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }
+
+  const handlePairStartCreator = async () => {
+    if (!generatedCode || isPairProcessing) return
+    setIsPairProcessing(true)
+    try {
+      const result = await getPairSecretKey()
+      if (!result) {
+        setPairError('Secret key not found. Please set up your secret key first.')
+        setIsPairProcessing(false)
+        return
+      }
+      const { localPadId, remotePadId } = await derivePairKeys(result.hmacKey, generatedCode, 1)
+      await createPairSession(localPadId, remotePadId, generatedCode, 1)
+      navigateTo('/p/' + localPadId)
+      onSessionStarted()
+    } catch (err) {
+      console.error('Failed to start pair session:', err)
+      setPairError('Failed to start pair session')
+      setIsPairProcessing(false)
+    }
+  }
+
+  const validateCode = (code: string): string | null => {
+    if (!code) return 'Please enter a pair code'
+    if (code.length !== PAIR_CODE_LENGTH) return `Code must be ${PAIR_CODE_LENGTH} characters (got ${code.length})`
+    if (!isValidPairCode(code)) return 'Invalid pair code (checksum mismatch — check for typos)'
+    return null
+  }
+
+  const handlePairJoin = async () => {
+    if (isPairProcessing) return
+    const code = pairJoinInput.trim()
+    const validationError = validateCode(code)
+    if (validationError) {
+      setPairError(validationError)
+      return
+    }
+    setIsPairProcessing(true)
+    try {
+      const result = await getPairSecretKey()
+      if (!result) {
+        setPairError('Secret key not found. Please set up your secret key first.')
+        setIsPairProcessing(false)
+        return
+      }
+      const { localPadId, remotePadId } = await derivePairKeys(result.hmacKey, code, 2)
+      await createPairSession(localPadId, remotePadId, code, 2)
+      navigateTo('/p/' + localPadId)
+      onSessionStarted()
+    } catch (err) {
+      console.error('Failed to join pair session:', err)
+      setPairError('Failed to join pair session')
+      setIsPairProcessing(false)
+    }
+  }
+
+  const handlePairKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handlePairJoin()
+  }
+
+  const handleClearSecretKey = async () => {
+    if (!confirm('Are you sure you want to clear your pair secret key? You will lose access to all pair sessions on this device.')) return
+    try {
+      await clearPairSecretKey()
+      setMode('mode-select')
+    } catch (err) {
+      console.error('Failed to clear secret key:', err)
+      setPairError('Failed to clear secret key')
+    }
+  }
+
   const copySecret = async () => {
     if (!newPadData) return
 
-    // Clear any existing timeout
     if (copyTimeoutRef.current) {
       clearTimeout(copyTimeoutRef.current)
       copyTimeoutRef.current = null
     }
 
-    // Reset states before attempting
     setCopied(false)
     setCopyError(false)
 
     try {
       await navigator.clipboard.writeText(newPadData.secret)
       setCopied(true)
-      // Auto-reset success message after 3 seconds
       copyTimeoutRef.current = setTimeout(() => {
         setCopied(false)
         copyTimeoutRef.current = null
@@ -279,7 +456,6 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     } catch (error) {
       console.error('Failed to copy:', error)
       setCopyError(true)
-      // Auto-reset error message after 5 seconds
       copyTimeoutRef.current = setTimeout(() => {
         setCopyError(false)
         copyTimeoutRef.current = null
@@ -353,7 +529,7 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
           )}
           <div className="flex gap-3">
             <button
-              onClick={() => setMode('choice')}
+              onClick={() => setMode('sender-receiver')}
               className="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded transition-colors"
             >
               Back
@@ -370,54 +546,345 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
     )
   }
 
+  if (mode === 'pair-setup') {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-gray-800 rounded-lg p-8 max-w-lg w-full mx-4">
+          <h2 className="text-2xl font-bold text-white mb-4">Pair Mode Setup</h2>
+          <p className="text-gray-300 mb-4">
+            You need a secret key for pair mode. Generate a new one or import an existing one.
+          </p>
+
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={() => { setPairSetupTab('generate'); setPairSetupError('') }}
+              className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${pairSetupTab === 'generate' ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+            >
+              Generate
+            </button>
+            <button
+              onClick={() => { setPairSetupTab('import'); setPairSetupError('') }}
+              className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${pairSetupTab === 'import' ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+            >
+              Import
+            </button>
+          </div>
+
+          {pairSetupTab === 'generate' && (
+            <div className="space-y-4">
+              {!generatedEncodedKey ? (
+                <button
+                  onClick={handlePairSetupGenerate}
+                  disabled={isPairSetupProcessing}
+                  className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 text-white font-medium py-3 px-4 rounded transition-colors"
+                >
+                  {isPairSetupProcessing ? 'Generating...' : 'Generate Secret Key'}
+                </button>
+              ) : (
+                <>
+                  <div className="bg-gray-900 p-4 rounded flex items-center justify-between gap-2">
+                    <code className="text-sm font-mono text-purple-300 break-all select-all">{generatedEncodedKey}</code>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(generatedEncodedKey)
+                          setCopiedEncodedKey(true)
+                          setTimeout(() => setCopiedEncodedKey(false), 2000)
+                        } catch (err) {
+                          console.error('Failed to copy:', err)
+                        }
+                      }}
+                      className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm transition-colors shrink-0"
+                    >
+                      {copiedEncodedKey ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                  <p className="text-gray-400 text-sm">Save this key somewhere safe. You'll need it to pair on other devices.</p>
+                  {pairSetupError && <p className="text-red-400 text-xs">{pairSetupError}</p>}
+                  <button
+                    onClick={handlePairSetupConfirmGenerate}
+                    disabled={isPairSetupProcessing}
+                    className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-800 disabled:text-green-400 text-white font-medium py-3 px-4 rounded transition-colors"
+                  >
+                    {isPairSetupProcessing ? 'Saving...' : 'Confirm & Continue'}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {pairSetupTab === 'import' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Enter your {SECRET_KEY_ENCODED_LENGTH}-character secret key
+                </label>
+                <input
+                  type="text"
+                  value={pairSetupImportInput}
+                  onChange={(e) => { setPairSetupImportInput(e.target.value); setPairSetupError('') }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handlePairSetupImport() }}
+                  placeholder={`${SECRET_KEY_ENCODED_LENGTH}-character secret key`}
+                  className="w-full px-3 py-2 bg-gray-700 text-gray-100 rounded text-sm font-mono placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  maxLength={SECRET_KEY_ENCODED_LENGTH}
+                />
+                {pairSetupError && <p className="text-red-400 text-xs mt-1">{pairSetupError}</p>}
+              </div>
+              <button
+                onClick={handlePairSetupImport}
+                disabled={isPairSetupProcessing}
+                className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:text-purple-400 text-white font-medium py-3 px-4 rounded transition-colors"
+              >
+                {isPairSetupProcessing ? 'Importing...' : 'Import & Continue'}
+              </button>
+            </div>
+          )}
+
+          <div className="mt-6 flex justify-end">
+            <button
+              onClick={() => setMode('mode-select')}
+              className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded transition-colors"
+            >
+              Back
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (mode === 'pair') {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-gray-800 rounded-lg p-8 max-w-lg w-full mx-4">
+          <h2 className="text-2xl font-bold text-white mb-4">Pair Mode</h2>
+
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={() => { setPairTab('create'); setPairError('') }}
+              className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${pairTab === 'create' ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+            >
+              Create Pair
+            </button>
+            <button
+              onClick={() => { setPairTab('join'); setPairError('') }}
+              className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${pairTab === 'join' ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+            >
+              Join Pair
+            </button>
+          </div>
+
+          {pairTab === 'create' && (
+            <div className="space-y-4">
+              {!generatedCode ? (
+                <button
+                  onClick={handlePairGenerate}
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-4 rounded transition-colors"
+                >
+                  Generate Code
+                </button>
+              ) : (
+                <>
+                  <div className="bg-gray-900 p-4 rounded flex items-center justify-between gap-2">
+                    <code className="text-sm font-mono text-purple-300 break-all select-all">{generatedCode}</code>
+                    <button
+                      onClick={handlePairCopyCode}
+                      className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm transition-colors shrink-0"
+                    >
+                      {copiedCode ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                  <p className="text-gray-400 text-sm">Share this code with your partner, then click Start.</p>
+                  {pairError && <p className="text-red-400 text-xs">{pairError}</p>}
+                  <button
+                    onClick={handlePairStartCreator}
+                    disabled={isPairProcessing}
+                    className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-800 disabled:text-green-400 text-white font-medium py-3 px-4 rounded transition-colors"
+                  >
+                    {isPairProcessing ? 'Starting...' : 'Start'}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {pairTab === 'join' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Enter pair code
+                </label>
+                <input
+                  ref={pairJoinInputRef}
+                  type="text"
+                  value={pairJoinInput}
+                  onChange={(e) => { setPairJoinInput(e.target.value); setPairError('') }}
+                  onKeyDown={handlePairKeyDown}
+                  placeholder={`${PAIR_CODE_LENGTH}-character code`}
+                  className="w-full px-3 py-2 bg-gray-700 text-gray-100 rounded text-sm font-mono placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  maxLength={PAIR_CODE_LENGTH}
+                />
+                {pairError && <p className="text-red-400 text-xs mt-1">{pairError}</p>}
+              </div>
+              <button
+                onClick={handlePairJoin}
+                disabled={isPairProcessing}
+                className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:text-purple-400 text-white font-medium py-3 px-4 rounded transition-colors"
+              >
+                {isPairProcessing ? 'Joining...' : 'Join'}
+              </button>
+            </div>
+          )}
+
+          {pairSessions.length > 0 && (
+            <div className="pt-4 mt-4 border-t border-gray-700">
+              <h3 className="text-sm font-medium text-gray-400 mb-2">Saved Pair Sessions</h3>
+              <div className="space-y-2">
+                {pairSessions.map((ps) => (
+                  <div key={ps.localPadId} className="flex items-center justify-between bg-gray-700 rounded px-3 py-2">
+                    <div>
+                      <span className="text-sm font-mono text-purple-300">[{ps.pairCode}]</span>
+                      <span className="text-xs text-gray-400 ml-2">
+                        {new Date(ps.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          navigateTo('/p/' + ps.localPadId)
+                          onSessionStarted()
+                        }}
+                        className="px-2 py-1 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
+                      >
+                        Resume
+                      </button>
+                      <button
+                        onClick={async () => {
+                          await clearPairSession(ps.localPadId)
+                          setPairSessions(prev => prev.filter(s => s.localPadId !== ps.localPadId))
+                        }}
+                        className="px-2 py-1 text-xs bg-gray-600 hover:bg-gray-500 text-gray-300 rounded transition-colors"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Clear secret key */}
+          <div className="pt-4 mt-4 border-t border-gray-700">
+            {pairFingerprint && (
+              <p className="text-xs font-mono text-gray-400 mb-2">
+                Secret key fingerprint: {pairFingerprint.slice(0, 5)}-{pairFingerprint.slice(5)}
+              </p>
+            )}
+            {pairError && !generatedCode && pairTab === 'create' && <p className="text-red-400 text-xs mb-2">{pairError}</p>}
+            <button
+              onClick={handleClearSecretKey}
+              className="w-full px-3 py-2 text-xs bg-red-900 hover:bg-red-800 text-red-300 rounded transition-colors"
+            >
+              Clear Secret Key
+            </button>
+          </div>
+
+          <div className="mt-6 flex justify-end">
+            <button
+              onClick={() => setMode('mode-select')}
+              className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded transition-colors"
+            >
+              Back
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (mode === 'sender-receiver') {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-gray-800 rounded-lg p-8 max-w-md w-full mx-4">
+          <h2 className="text-2xl font-bold text-white mb-4">Sender / Receiver</h2>
+          <p className="text-gray-300 mb-6">
+            Choose how to start your session:
+          </p>
+          {sessionEndedByRemote && (
+            <div className="bg-yellow-900/50 border border-yellow-600 rounded-lg p-3 mb-4">
+              <p className="text-yellow-200 text-sm">Your saved session was ended by another device.</p>
+            </div>
+          )}
+          {createError && (
+            <p className="text-red-400 text-sm mb-4">{createError}</p>
+          )}
+          {resumeError && (
+            <p className="text-red-400 text-sm mb-4">{resumeError}</p>
+          )}
+          <div className="space-y-3">
+            {lastSessionPadId && (
+              <button
+                onClick={handleResumeLastSession}
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+              >
+                Resume Last Session: {lastSessionPadId}
+              </button>
+            )}
+            <button
+              onClick={handleStartNewSession}
+              disabled={isCreating}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              {isCreating ? 'Creating...' : 'Start New Session'}
+            </button>
+            <button
+              onClick={() => setMode('import')}
+              className="w-full bg-gray-600 hover:bg-gray-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              Import Existing Secret Key
+            </button>
+            {lastSessionPadId && (
+              <button
+                onClick={handleClearSession}
+                className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm"
+              >
+                Clear Saved Session
+              </button>
+            )}
+            <button
+              onClick={() => setMode('mode-select')}
+              className="w-full bg-gray-700 hover:bg-gray-600 text-gray-300 font-medium py-2 px-4 rounded-lg transition-colors text-sm"
+            >
+              Back
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // mode === 'mode-select' (default home screen)
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-gray-800 rounded-lg p-8 max-w-md w-full mx-4">
         <h2 className="text-2xl font-bold text-white mb-4">Welcome to NostrPad</h2>
         <p className="text-gray-300 mb-6">
-          Choose how to start your session:
+          Choose a mode to get started:
         </p>
-        {sessionEndedByRemote && (
-          <div className="bg-yellow-900/50 border border-yellow-600 rounded-lg p-3 mb-4">
-            <p className="text-yellow-200 text-sm">Your saved session was ended by another device.</p>
-          </div>
-        )}
-        {createError && (
-          <p className="text-red-400 text-sm mb-4">{createError}</p>
-        )}
-        {resumeError && (
-          <p className="text-red-400 text-sm mb-4">{resumeError}</p>
-        )}
         <div className="space-y-3">
-          {lastSessionPadId && (
-            <button
-              onClick={handleResumeLastSession}
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
-            >
-              Resume Last Session: {lastSessionPadId}
-            </button>
-          )}
           <button
-            onClick={handleStartNewSession}
-            disabled={isCreating}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+            onClick={() => setMode('sender-receiver')}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-4 px-4 rounded-lg transition-colors text-lg"
           >
-            {isCreating ? 'Creating...' : 'Start New Session'}
+            Sender / Receiver
           </button>
           <button
-            onClick={() => setMode('import')}
-            className="w-full bg-gray-600 hover:bg-gray-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+            onClick={handlePairModeClick}
+            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-4 px-4 rounded-lg transition-colors text-lg"
           >
-            Import Existing Secret Key
+            Pair Mode
           </button>
-          {lastSessionPadId && (
-            <button
-              onClick={handleClearSession}
-              className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm"
-            >
-              Clear Saved Session
-            </button>
-          )}
           <div className="pt-4 border-t border-gray-700">
             <p className="text-gray-400 text-xs italic text-center">
               Note: NostrPad is designed for temporary sharing rather than long-term storage. Sessions and data are ephemeral and may be purged periodically. Always have a backup of your data that you want to keep elsewhere.

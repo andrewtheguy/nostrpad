@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { deriveKeys } from '../lib/keys'
+import { navigateTo } from '../lib/navigation'
 import { useNostrPad } from '../hooks/useNostrPad'
 import { getVerifiedStoredSession, clearSession } from '../lib/sessionStorage'
 import { Header } from './Header'
@@ -39,7 +40,7 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
 
     alert('Session invalidated: This pad was opened in editor mode on another device.')
     await clearSession()
-    window.location.hash = padId
+    navigateTo('/s/' + padId)
     window.location.reload()
   }, [padId, keys?.sessionCreatedAt])
 
@@ -143,7 +144,7 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
   }, [padId, isEdit, loading])
 
   const handleSwitchToEditMode = () => {
-    window.location.hash = `${padId}:rw`
+    navigateTo('/s/' + padId + '/rw')
   }
 
   const handleRetry = () => {
@@ -155,7 +156,7 @@ export function PadPage({ padId, isEdit }: PadPageProps) {
 
   const handleViewOnly = () => {
     setEditModeFailed(false)
-    window.location.hash = padId
+    navigateTo('/s/' + padId)
   }
 
   const handleGoHome = () => {

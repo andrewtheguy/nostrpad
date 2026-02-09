@@ -1,6 +1,6 @@
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure'
 import { encode, encodeFixed } from './encoding'
-import { PAD_ID_BYTES, PAD_ID_LENGTH } from './constants'
+import { PAD_ID_BYTES, PAD_ID_LENGTH, PAIR_CODE_ALPHABET, PAIR_CODE_LENGTH, SECRET_KEY_ALPHABET, SECRET_KEY_DATA_LENGTH, SECRET_KEY_ENCODED_LENGTH } from './constants'
 import { getDecryptedPrivateKey } from './sessionStorage'
 
 export interface PadKeys {
@@ -35,40 +35,15 @@ export function createNewPad(): PadKeys {
 }
 
 /**
- * Parse hash URL into padId and edit flag
- * Formats: #padId or #padId:rw
+ * Parse pathname into padId and edit flag
+ * Formats: /s/PADID (view-only), /s/PADID/rw (edit)
  */
-export function parseUrl(hash: string): ParsedUrl {
-  // Remove leading # if present
-  const cleanHash = hash.startsWith('#') ? hash.slice(1) : hash
-
-  if (!cleanHash) {
+export function parseUrl(pathname: string): ParsedUrl {
+  const match = pathname.match(/^\/s\/([^/]+)(\/rw)?$/)
+  if (!match) {
     return { padId: null, isEdit: false }
   }
-
-  const colonIndex = cleanHash.indexOf(':')
-
-  if (colonIndex === -1) {
-    // View-only URL: just padId
-    return { padId: cleanHash, isEdit: false }
-  }
-
-  // Check suffix after colon
-  const suffix = cleanHash.slice(colonIndex + 1)
-  const padId = cleanHash.slice(0, colonIndex)
-
-  if (suffix === 'rw') {
-    return { padId, isEdit: true }
-  }
-
-  if (suffix === '') {
-    // Trailing colon with no suffix: treat as view-only
-    return { padId, isEdit: false }
-  }
-
-  // Invalid suffix format
-  console.warn(`Invalid URL suffix ':${suffix}' - expected ':rw' or no suffix`)
-  return { padId: null, isEdit: false }
+  return { padId: match[1], isEdit: match[2] === '/rw' }
 }
 
 /**
@@ -116,11 +91,178 @@ export async function deriveKeys(padId: string, isEdit: boolean): Promise<{ secr
  * Generate URLs for sharing
  */
 export function generateShareUrls(padId: string): { viewerUrl: string, editorUrl: string } {
-  const base = window.location.origin + window.location.pathname
+  const origin = window.location.origin
   return {
-    viewerUrl: `${base}#${padId}`,
-    editorUrl: `${base}#${padId}:rw`
+    viewerUrl: `${origin}/s/${padId}`,
+    editorUrl: `${origin}/s/${padId}/rw`
   }
+}
+
+/**
+ * Compute 1 checksum character for pair code data using position-weighted sum mod 29.
+ */
+export function computePairChecksum(data: string): string {
+  let sum = 0
+  for (let i = 0; i < data.length; i++) {
+    const val = PAIR_CODE_ALPHABET.indexOf(data[i])
+    sum += val * (i + 1)
+  }
+  return PAIR_CODE_ALPHABET[sum % PAIR_CODE_ALPHABET.length]
+}
+
+/**
+ * Validate a pair code: correct length (6), all chars in PAIR_CODE_ALPHABET, checksum match.
+ */
+export function isValidPairCode(code: string): boolean {
+  if (code.length !== PAIR_CODE_LENGTH) return false
+  for (const ch of code) {
+    if (!PAIR_CODE_ALPHABET.includes(ch)) return false
+  }
+  const data = code.slice(0, PAIR_CODE_LENGTH - 1)
+  const checksum = code.slice(PAIR_CODE_LENGTH - 1)
+  return computePairChecksum(data) === checksum
+}
+
+/**
+ * Generate a random pair code: 5 random PAIR_CODE_ALPHABET chars + 1 checksum char = 6 total
+ */
+export function generatePairCode(): string {
+  const dataLen = PAIR_CODE_LENGTH - 1
+  const bytes = crypto.getRandomValues(new Uint8Array(dataLen))
+  const data = Array.from(bytes).map(b => PAIR_CODE_ALPHABET[b % PAIR_CODE_ALPHABET.length]).join('')
+  return data + computePairChecksum(data)
+}
+
+/**
+ * Derive deterministic keypairs for a pair session.
+ * Uses secretKey (non-extractable HMAC CryptoKey) + pairCode (6-char channel ID) + role to derive keys.
+ * The root secret key never leaves Web Crypto — only derived keys are exposed as raw bytes.
+ */
+export async function derivePairKeys(secretKey: CryptoKey, pairCode: string, role: 1 | 2): Promise<{
+  localSecretKey: Uint8Array
+  localPublicKey: string
+  localPadId: string
+  remotePadId: string
+}> {
+  const localSide = role
+  const remoteSide = role === 1 ? 2 : 1
+
+  const encoder = new TextEncoder()
+
+  const localDerivedKey = new Uint8Array(await crypto.subtle.sign('HMAC', secretKey, encoder.encode(`nostrpad-pair:${pairCode}:${localSide}`)))
+  const localPublicKey = getPublicKey(localDerivedKey)
+  const localPadId = encodeFixed(hexToBytes(localPublicKey).slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
+
+  const remoteDerivedKey = new Uint8Array(await crypto.subtle.sign('HMAC', secretKey, encoder.encode(`nostrpad-pair:${pairCode}:${remoteSide}`)))
+  const remotePublicKey = getPublicKey(remoteDerivedKey)
+  const remotePadId = encodeFixed(hexToBytes(remotePublicKey).slice(0, PAD_ID_BYTES), PAD_ID_LENGTH)
+
+  return { localSecretKey: localDerivedKey, localPublicKey, localPadId, remotePadId }
+}
+
+// First 44 primes for dual-weighted checksum
+const SECRET_KEY_PRIMES = [
+  2, 3, 5, 7, 11, 13, 17, 19, 23, 29,
+  31, 37, 41, 43, 47, 53, 59, 61, 67, 71,
+  73, 79, 83, 89, 97, 101, 103, 107, 109, 113,
+  127, 131, 137, 139, 149, 151, 157, 163, 167, 173,
+  179, 181, 191, 193
+]
+
+const SECRET_KEY_BASE = BigInt(SECRET_KEY_ALPHABET.length) // 59
+
+/**
+ * Compute 2 checksum characters for secret key data using dual weighted sums mod 59.
+ * c1 = position-weighted: catches single substitutions + adjacent transpositions
+ * c2 = prime-weighted: independent second check
+ */
+export function computeSecretKeyChecksum(data: string): string {
+  let sum1 = 0
+  let sum2 = 0
+  for (let i = 0; i < data.length; i++) {
+    const val = SECRET_KEY_ALPHABET.indexOf(data[i])
+    sum1 += val * (i + 1)
+    sum2 += val * SECRET_KEY_PRIMES[i]
+  }
+  const c1 = SECRET_KEY_ALPHABET[sum1 % SECRET_KEY_ALPHABET.length]
+  const c2 = SECRET_KEY_ALPHABET[sum2 % SECRET_KEY_ALPHABET.length]
+  return c1 + c2
+}
+
+/**
+ * Encode 32 bytes to a 46-char secret key string (44 data + 2 checksum).
+ * Fixed-length base-59 encoding.
+ */
+export function encodeSecretKey(bytes: Uint8Array): string {
+  let num = BigInt(0)
+  for (const byte of bytes) {
+    num = num * BigInt(256) + BigInt(byte)
+  }
+
+  // Fixed-length base-59: always produce exactly SECRET_KEY_DATA_LENGTH chars
+  const chars: string[] = []
+  for (let i = 0; i < SECRET_KEY_DATA_LENGTH; i++) {
+    const remainder = Number(num % SECRET_KEY_BASE)
+    chars.unshift(SECRET_KEY_ALPHABET[remainder])
+    num = num / SECRET_KEY_BASE
+  }
+
+  const data = chars.join('')
+  return data + computeSecretKeyChecksum(data)
+}
+
+/**
+ * Decode a 46-char encoded secret key back to 32 bytes.
+ * Validates length, alphabet, and checksum.
+ */
+export function decodeSecretKey(encoded: string): Uint8Array {
+  if (encoded.length !== SECRET_KEY_ENCODED_LENGTH) {
+    throw new Error(`Invalid secret key length: expected ${SECRET_KEY_ENCODED_LENGTH}, got ${encoded.length}`)
+  }
+
+  const data = encoded.slice(0, SECRET_KEY_DATA_LENGTH)
+  const checksum = encoded.slice(SECRET_KEY_DATA_LENGTH)
+
+  for (const ch of data) {
+    if (!SECRET_KEY_ALPHABET.includes(ch)) {
+      throw new Error(`Invalid character in secret key: "${ch}"`)
+    }
+  }
+
+  if (computeSecretKeyChecksum(data) !== checksum) {
+    throw new Error('Invalid secret key checksum')
+  }
+
+  // Decode base-59 data to BigInt
+  let num = BigInt(0)
+  for (const ch of data) {
+    num = num * SECRET_KEY_BASE + BigInt(SECRET_KEY_ALPHABET.indexOf(ch))
+  }
+
+  // Convert BigInt to 32 bytes (fixed length)
+  const bytes = new Uint8Array(32)
+  for (let i = 31; i >= 0; i--) {
+    bytes[i] = Number(num % BigInt(256))
+    num = num / BigInt(256)
+  }
+
+  return bytes
+}
+
+/**
+ * Validate a secret key encoding: length + alphabet + checksum.
+ */
+export function isValidSecretKeyEncoding(encoded: string): boolean {
+  if (encoded.length !== SECRET_KEY_ENCODED_LENGTH) return false
+
+  const data = encoded.slice(0, SECRET_KEY_DATA_LENGTH)
+  const checksum = encoded.slice(SECRET_KEY_DATA_LENGTH)
+
+  for (const ch of encoded) {
+    if (!SECRET_KEY_ALPHABET.includes(ch)) return false
+  }
+
+  return computeSecretKeyChecksum(data) === checksum
 }
 
 // Helper functions
@@ -132,6 +274,3 @@ function hexToBytes(hex: string): Uint8Array {
   return bytes
 }
 
-export function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
-}

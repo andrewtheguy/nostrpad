@@ -7,13 +7,17 @@ interface FooterProps {
   relayStatus: Map<string, boolean>
   activeRelays: string[]
   isDiscovering: boolean
+  isSplitMode?: boolean
+  remoteContent?: string
 }
 
 export function Footer({
   content,
   relayStatus,
   activeRelays,
-  isDiscovering
+  isDiscovering,
+  isSplitMode,
+  remoteContent
 }: FooterProps) {
   const characterCount = content.length
   const [expanded, setExpanded] = useState(false)
@@ -63,10 +67,28 @@ export function Footer({
           )}
         </button>
         <div className="flex items-center gap-4">
-          <span className="text-xs font-mono text-gray-300">{formatCrc32(content)}</span>
-          <span className={`text-xs font-mono ${getCountColor()}`}>
-            {characterCount.toLocaleString()}/{MAX_CONTENT_LENGTH.toLocaleString()}
-          </span>
+          {isSplitMode && remoteContent !== undefined ? (
+            <>
+              <span className="text-xs text-green-400">Send:</span>
+              <span className="text-xs font-mono text-gray-300">{formatCrc32(content)}</span>
+              <span className={`text-xs font-mono ${getCountColor()}`}>
+                {characterCount.toLocaleString()}
+              </span>
+              <span className="text-xs text-gray-600">|</span>
+              <span className="text-xs text-blue-400">Recv:</span>
+              <span className="text-xs font-mono text-gray-300">{formatCrc32(remoteContent)}</span>
+              <span className="text-xs font-mono text-gray-300">
+                {remoteContent.length.toLocaleString()}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="text-xs font-mono text-gray-300">{formatCrc32(content)}</span>
+              <span className={`text-xs font-mono ${getCountColor()}`}>
+                {characterCount.toLocaleString()}/{MAX_CONTENT_LENGTH.toLocaleString()}
+              </span>
+            </>
+          )}
         </div>
       </div>
 
