@@ -14,12 +14,11 @@ interface HeaderProps {
   isLoadingContent?: boolean
   isSplitMode?: boolean
   pairCode?: string
-  onExitSplit?: () => void
   onClearContent?: () => void
   remoteContent?: string
 }
 
-export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoadingContent, isSplitMode, pairCode, onExitSplit, onClearContent, remoteContent }: HeaderProps) {
+export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoadingContent, isSplitMode, pairCode, onClearContent, remoteContent }: HeaderProps) {
   const [showShareModal, setShowShareModal] = useState(false)
   const [showInfoModal, setShowInfoModal] = useState(false)
   const [showPairModal, setShowPairModal] = useState(false)
@@ -160,14 +159,7 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoading
             <span className="sm:hidden">🗑️</span>
             <span className="hidden sm:inline">Clear Session</span>
           </button>
-          {isSplitMode ? (
-            <button
-              onClick={onExitSplit}
-              className="px-2 py-1 text-xs sm:text-sm bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
-            >
-              Exit Split
-            </button>
-          ) : (
+          {!isSplitMode && (
             <>
               {canEdit && (
                 <button

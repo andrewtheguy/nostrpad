@@ -158,7 +158,6 @@ export function SplitPadPage({ pairCode }: SplitPadPageProps) {
         isLoadingContent={local.isLoadingContent}
         isSplitMode
         pairCode={pairKeys?.pairCode}
-        onExitSplit={handleExitSplit}
         onClearContent={handleClearContent}
         remoteContent={remote.content}
       />
@@ -167,6 +166,9 @@ export function SplitPadPage({ pairCode }: SplitPadPageProps) {
         <div className="flex-1 flex flex-col min-h-0">
           <div className="px-4 py-1 bg-green-900/50 border-b border-gray-700 flex items-center gap-2">
             <span className="text-xs font-medium text-green-400">Send</span>
+            {pairKeys?.localPadId && (
+              <span className="text-xs font-mono text-green-300/70">{pairKeys.localPadId}</span>
+            )}
           </div>
           <Editor
             content={local.content}
@@ -178,6 +180,9 @@ export function SplitPadPage({ pairCode }: SplitPadPageProps) {
         <div className="flex-1 flex flex-col min-h-0 border-t sm:border-t-0 sm:border-l border-gray-700">
           <div className="px-4 py-1 bg-blue-900/50 border-b border-gray-700 flex items-center gap-2">
             <span className="text-xs font-medium text-blue-400">Receive</span>
+            {pairKeys?.remotePadId && (
+              <span className="text-xs font-mono text-blue-300/70">{pairKeys.remotePadId}</span>
+            )}
           </div>
           {remote.hasReceivedEvent ? (
             <Editor
