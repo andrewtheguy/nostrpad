@@ -187,7 +187,7 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoading
         />
       )}
       {showInfoModal && (
-        <InfoModal onClose={() => setShowInfoModal(false)} />
+        <InfoModal onClose={() => setShowInfoModal(false)} isSplitMode={isSplitMode} />
       )}
       {showPairModal && (
         <PairModal
