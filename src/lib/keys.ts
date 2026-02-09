@@ -2,7 +2,7 @@ import { generateSecretKey, getPublicKey } from 'nostr-tools/pure'
 import { sha256 } from '@noble/hashes/sha256'
 import { utf8ToBytes } from '@noble/hashes/utils'
 import { encode, encodeFixed } from './encoding'
-import { PAD_ID_BYTES, PAD_ID_LENGTH } from './constants'
+import { PAD_ID_BYTES, PAD_ID_LENGTH, PAIR_CODE_ALPHABET, PAIR_CODE_LENGTH } from './constants'
 import { getDecryptedPrivateKey } from './sessionStorage'
 
 export interface PadKeys {
@@ -98,6 +98,14 @@ export function generateShareUrls(padId: string): { viewerUrl: string, editorUrl
     viewerUrl: `${origin}/s/${padId}`,
     editorUrl: `${origin}/s/${padId}/rw`
   }
+}
+
+/**
+ * Generate a random pair code from the pair alphabet
+ */
+export function generatePairCode(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(PAIR_CODE_LENGTH))
+  return Array.from(bytes).map(b => PAIR_CODE_ALPHABET[b % PAIR_CODE_ALPHABET.length]).join('')
 }
 
 /**
