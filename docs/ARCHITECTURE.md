@@ -37,9 +37,11 @@ src/
 │   ├── Footer.tsx        # Status bar with CRC32 and relay status
 │   ├── Header.tsx        # Top bar with actions
 │   ├── InfoModal.tsx     # Encryption info modal
-│   ├── PadPage.tsx       # Main pad view orchestrator
-│   ├── SessionStartModal.tsx  # Session management UI
-│   └── ShareModal.tsx    # Share URLs and QR code
+│   ├── PadPage.tsx       # Sender/receiver pad view orchestrator
+│   ├── PairModal.tsx     # Create/join pair session modal
+│   ├── SessionStartModal.tsx  # Session & pair setup management UI
+│   ├── ShareModal.tsx    # Share URLs and QR code
+│   └── SplitPadPage.tsx  # Split-screen pair mode view
 ├── hooks/
 │   ├── useDebounce.ts    # Debounce hook for publish delay
 │   ├── useNostrPad.ts    # Core Nostr sync logic
@@ -47,10 +49,13 @@ src/
 ├── lib/
 │   ├── constants.ts      # App constants
 │   ├── encoding.ts       # Base59 encoding/decoding utilities
-│   ├── keys.ts           # Key derivation and URL parsing
+│   ├── keys.ts           # Key derivation, URL parsing, pair code generation
+│   ├── keys.test.ts      # Key derivation tests
+│   ├── navigation.ts     # Path-based navigation helper
 │   ├── nostr.ts          # Nostr event creation/validation
+│   ├── pairSessionStorage.ts  # IndexedDB pair mode session management
 │   ├── relayDiscovery.ts # Relay probing logic
-│   ├── sessionStorage.ts # IndexedDB session management
+│   ├── sessionStorage.ts # IndexedDB sender/receiver session management
 │   └── types.ts          # TypeScript types
 └── utils/
     └── crc32.ts          # CRC32 checksum for content
@@ -77,15 +82,16 @@ Pad ID = Base59(pubkey[0:8]) = 12 characters
 
 ### URL Routing
 
-Hash-based routing with two modes:
+Path-based routing with three route families:
 
 | URL Pattern | Mode | Description |
 |-------------|------|-------------|
-| `/#<padId>` | View | Read-only access, anyone can view |
-| `/#<padId>:rw` | Edit | Requires active session with matching secret key |
+| `/s/<padId>` | View | Read-only sender/receiver pad |
+| `/s/<padId>/rw` | Edit | Edit mode, requires active session with matching secret key |
+| `/p/<padId>` | Pair | Split-screen pair mode (send + receive panes) |
 | `/` | Start | Session management modal |
 
-The `App.tsx` component handles routing via `hashchange` events.
+The `App.tsx` component handles routing via `popstate` events and `navigation.ts` provides `navigateTo()` for programmatic path changes using `history.pushState`.
 
 ### Session Storage
 
@@ -204,6 +210,83 @@ To support multiple devices where importing a key on a new device invalidates th
    - If `event.created_at * 1000 > session.createdAt`, the session is considered "overridden" by a newer session.
    - Action: Local session is cleared, and the user is downgraded to view-only mode.
 
+### Pair Mode
+
+Pair mode allows two users sharing the same secret key to create split-screen sessions for bidirectional communication. Each user sees a "Send" pane (editable) and a "Receive" pane (read-only from the partner).
+
+#### Pair Secret Key Storage
+
+The pair secret key is stored in a separate IndexedDB database (`nostrpad-pair-sessions`, version 4) with two object stores: `pairSecretKey` and `pairSessions`.
+
+```typescript
+interface PairSecretKeyData {
+  hmacKey: CryptoKey        // non-extractable HMAC-SHA256
+  fingerprint: string       // 11-char base59 string
+  createdAt: number
+  integrityTag: Uint8Array  // SHA-256(fingerprint + createdAt)
+}
+```
+
+The raw secret key bytes are imported as a non-extractable HMAC-SHA256 `CryptoKey` on store. After import, the raw bytes are never accessible to JavaScript.
+
+**Secret Key Encoding:** For generation and import, the 32-byte secret key is encoded as a 46-character string (44 data chars in base-59 + 2 checksum chars). The checksum uses dual weighted sums (position-weighted + prime-weighted) mod 59 to catch single substitutions and transpositions.
+
+#### Fingerprint
+
+Since the key is non-extractable, the fingerprint provides a visual confirmation of which key is loaded:
+
+```
+fingerprint = encodeFixed(HMAC-SHA256(hmacKey, "nostrpad-pair-fingerprint")[0:8], 11)
+```
+
+This produces an 11-character base59 string (~47 bits). The same raw secret key always produces the same fingerprint, so users can compare across devices after import. Displayed as `Secret key fingerprint: ABCDE-FGHIJK`.
+
+#### Integrity Verification
+
+The integrity tag binds the fingerprint and timestamp together:
+
+```
+integrityTag = SHA-256(utf8(fingerprint) || bigEndian64(createdAt))
+```
+
+On read (`getPairSecretKey`):
+1. Recompute fingerprint from hmacKey (sign known label)
+2. Constant-time compare with stored fingerprint
+3. Recompute integrity tag from fingerprint + createdAt
+4. Constant-time compare with stored integrity tag
+5. Return null if either check fails
+
+This detects CryptoKey swap (fingerprint changes), createdAt tampering (integrity tag changes), and partial record corruption.
+
+#### Key Derivation
+
+Each pair session derives deterministic keypairs from the root HMAC key:
+
+```
+localKey  = HMAC-SHA256(secretKey, "nostrpad-pair:{pairCode}:{role}")
+remoteKey = HMAC-SHA256(secretKey, "nostrpad-pair:{pairCode}:{otherRole}")
+```
+
+Where `role` is 1 (creator) or 2 (joiner). Each derived key is a 32-byte nostr secret key from which public keys and pad IDs are computed.
+
+#### Pair Code
+
+A 6-character code (5 random + 1 checksum) using a 29-character lowercase alphabet. The checksum uses position-weighted sum mod 29 to catch typos and transpositions.
+
+#### Pair Session Data
+
+```typescript
+interface PairSessionData {
+  localPadId: string
+  remotePadId: string
+  pairCode: string
+  role: 1 | 2
+  createdAt: number
+}
+```
+
+On load (`getDecryptedPairSession`), derived pad IDs are verified against stored values. If `derivedLocalPadId !== requestedLocalPadId` or `derivedRemotePadId !== storedRemotePadId`, the session is cleared as corrupt.
+
 ### Content Encryption
 
 All pad content is encrypted using NIP-44 before publishing:
@@ -252,28 +335,51 @@ Properties of kind 30078:
 ### App.tsx
 
 Root component handling:
-- Hash-based routing
+- Path-based routing (`/s/`, `/p/`, `/`)
+- Renders `SplitPadPage` for pair routes, `PadPage` for sender/receiver routes
 - Session modal display logic
-- Route state management
+- Route state management via `popstate` events
 
 ### SessionStartModal.tsx
 
 Session management UI with modes:
-- **Choice**: Resume/New/Import options
+- **Mode Select**: Choose between Sender/Receiver and Pair Mode
+- **Sender/Receiver**: Resume/New/Import options
 - **Show Secret**: Display generated secret key for backup
 - **Import**: Paste existing secret key
+- **Pair Setup**: Generate or import a pair secret key (46-char encoded)
+- **Pair**: Create or join pair sessions, list saved sessions, display secret key fingerprint
 
 State validations:
 - Validates session exists before resume
 - Confirms secret key backup before proceeding
+- Validates pair code checksum before joining
 - Handles storage errors gracefully
 
 ### PadPage.tsx
 
-Main view orchestrator:
+Sender/receiver view orchestrator:
 - Derives keys from padId and session
 - Redirects to view-only if edit requested without valid session
+- Single-tab editor enforcement via BroadcastChannel
 - Composes Header, Editor, Footer components
+
+### SplitPadPage.tsx
+
+Pair mode split-screen view:
+- Loads pair session from IndexedDB via `getDecryptedPairSession`
+- Creates two `useNostrPad` instances: local (editable, `isBlocked` while loading) and remote (view-only, `isBlocked` until pair keys resolve)
+- Single-tab editor enforcement via BroadcastChannel
+- Renders Send pane (left/top, editable) and Receive pane (right/bottom, read-only)
+- Shows loading, error, and multi-tab-blocked states
+
+### PairModal.tsx
+
+Modal for creating/joining pair sessions from within the app:
+- Two tabs: Create Pair and Join Pair
+- Generates 6-character pair codes with checksum validation
+- Displays secret key fingerprint
+- Fetches pair secret key on mount, derives keys via `derivePairKeys`
 
 ### useNostrPad Hook
 
@@ -294,12 +400,25 @@ Content Change
                                └─────────────┘
 ```
 
+**Options:**
+```typescript
+interface UseNostrPadOptions {
+  padId: string
+  publicKey: string
+  secretKey: Uint8Array | null
+  sessionCreatedAt?: number
+  onLogoutSignal?: () => void
+  isBlocked?: boolean  // Skip subscriptions and publishing when true
+}
+```
+
 **Key behaviors:**
 - Editor mode: One-time content fetch on init, then subscribe to logout events only
 - Viewer mode: Subscribe to all kind 30078 events, filter by padId match
 - Debounced publishing (500ms) to avoid relay spam
 - Nostr relay is the sole source of truth for content (no local caching)
 - Ref-based state to prevent stale closures
+- Guards: skips all subscriptions when `padId` is falsy or `isBlocked` is true
 
 ### useRelayDiscovery Hook
 
@@ -430,6 +549,12 @@ In sender/receiver mode, the nostr key IS the signing key (not derived from a ro
 | `DEBOUNCE_MS` | 500 | Publish debounce delay |
 | `MAX_CONTENT_LENGTH` | 16000 | Character limit |
 | `RELAY_PROBE_TIMEOUT` | 3000 | Relay health check timeout |
+| `PAIR_CODE_ALPHABET` | 29-char lowercase | Pair code character set (prime size) |
+| `PAIR_CODE_LENGTH` | 6 | Pair code length (5 data + 1 checksum) |
+| `SECRET_KEY_ALPHABET` | 59-char set | Secret key encoding alphabet (includes `.-,`) |
+| `SECRET_KEY_DATA_LENGTH` | 44 | Data characters in encoded secret key |
+| `SECRET_KEY_CHECKSUM_LENGTH` | 2 | Checksum characters in encoded secret key |
+| `SECRET_KEY_ENCODED_LENGTH` | 46 | Total encoded secret key length (44 + 2) |
 
 ## Base59 Encoding
 
