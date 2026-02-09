@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { generatePairCode } from '../lib/keys'
+import { generatePairCode, isValidPairCode } from '../lib/keys'
 import { navigateTo } from '../lib/navigation'
 import { PAIR_CODE_ALPHABET, PAIR_CODE_LENGTH } from '../lib/constants'
 
@@ -49,6 +49,7 @@ export function PairModal({ onClose }: PairModalProps) {
     for (const ch of code) {
       if (!PAIR_CODE_ALPHABET.includes(ch)) return `Invalid character: "${ch}"`
     }
+    if (!isValidPairCode(code)) return 'Invalid code (checksum mismatch — check for typos)'
     return null
   }
 

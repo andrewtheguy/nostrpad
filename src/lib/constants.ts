@@ -25,6 +25,8 @@ export const MAX_CONTENT_LENGTH = 16000
 // Excludes 0, O, I, l, 1 for unambiguous characters
 export const ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz-_'
 
-// Pair code: lowercase base32 alphabet (excludes 0/1/i/l/o/u for non-ambiguity, includes - and _)
-export const PAIR_CODE_ALPHABET = '23456789abcdefghjkmnpqrstvwxyz-_'
+// Pair code: 29-char alphabet (prime, enables perfect checksum detection)
+// Excludes 0/1/i/l/o/u/z for non-ambiguity; 29 is prime so weighted checksum
+// catches all single-char substitutions and transpositions of different chars
+export const PAIR_CODE_ALPHABET = '23456789abcdefghjkmnpqrstvwxy'
 export const PAIR_CODE_LENGTH = 6

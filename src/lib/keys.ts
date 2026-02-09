@@ -101,11 +101,38 @@ export function generateShareUrls(padId: string): { viewerUrl: string, editorUrl
 }
 
 /**
- * Generate a random pair code from the pair alphabet
+ * Compute checksum character for pair code data using position-weighted sum.
+ * Catches all single-character substitutions and transpositions of different characters.
+ */
+export function computePairChecksum(data: string): string {
+  let sum = 0
+  for (let i = 0; i < data.length; i++) {
+    sum += PAIR_CODE_ALPHABET.indexOf(data[i]) * (i + 1)
+  }
+  return PAIR_CODE_ALPHABET[sum % PAIR_CODE_ALPHABET.length]
+}
+
+/**
+ * Validate a pair code: correct length, valid characters, and checksum matches.
+ */
+export function isValidPairCode(code: string): boolean {
+  if (code.length !== PAIR_CODE_LENGTH) return false
+  for (const ch of code) {
+    if (!PAIR_CODE_ALPHABET.includes(ch)) return false
+  }
+  const data = code.slice(0, -1)
+  const checksum = code.slice(-1)
+  return computePairChecksum(data) === checksum
+}
+
+/**
+ * Generate a random pair code: (PAIR_CODE_LENGTH - 1) random chars + 1 checksum char
  */
 export function generatePairCode(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(PAIR_CODE_LENGTH))
-  return Array.from(bytes).map(b => PAIR_CODE_ALPHABET[b % PAIR_CODE_ALPHABET.length]).join('')
+  const dataLength = PAIR_CODE_LENGTH - 1
+  const bytes = crypto.getRandomValues(new Uint8Array(dataLength))
+  const data = Array.from(bytes).map(b => PAIR_CODE_ALPHABET[b % PAIR_CODE_ALPHABET.length]).join('')
+  return data + computePairChecksum(data)
 }
 
 /**
