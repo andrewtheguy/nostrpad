@@ -33,6 +33,7 @@ export function PairActions({ fingerprint, onSessionStarted, onClearKey, onBack 
     } catch (err) {
       console.error('Failed to start pair session:', err)
       setError(err instanceof Error ? err.message : 'Failed to start pair session')
+    } finally {
       setIsProcessing(false)
     }
   }
@@ -40,6 +41,14 @@ export function PairActions({ fingerprint, onSessionStarted, onClearKey, onBack 
   const handleJoin = async () => {
     if (isProcessing) return
     const code = joinInput.trim()
+    if (!code) {
+      setError('Please enter a pair code')
+      return
+    }
+    if (code.length !== PAIR_CODE_LENGTH) {
+      setError(`Pair code must be ${PAIR_CODE_LENGTH} characters`)
+      return
+    }
     setIsProcessing(true)
     setError('')
     try {
@@ -48,6 +57,7 @@ export function PairActions({ fingerprint, onSessionStarted, onClearKey, onBack 
     } catch (err) {
       console.error('Failed to join pair session:', err)
       setError(err instanceof Error ? err.message : 'Failed to join pair session')
+    } finally {
       setIsProcessing(false)
     }
   }
@@ -135,8 +145,13 @@ export function PairActions({ fingerprint, onSessionStarted, onClearKey, onBack 
                   </button>
                   <button
                     onClick={async () => {
-                      await clearPairSession(ps.pairCode)
-                      setPairSessions(prev => prev.filter(s => s.pairCode !== ps.pairCode))
+                      try {
+                        await clearPairSession(ps.pairCode)
+                        setPairSessions(prev => prev.filter(s => s.pairCode !== ps.pairCode))
+                      } catch (err) {
+                        console.error('Failed to clear pair session:', err)
+                        setError('Failed to clear pair session')
+                      }
                     }}
                     className="px-2 py-1 text-xs bg-gray-600 hover:bg-gray-500 text-gray-300 rounded transition-colors"
                   >
