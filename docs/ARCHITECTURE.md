@@ -65,13 +65,11 @@ src/
 
 ### Identity Model
 
-Each pad is associated with a Nostr keypair:
-- **Secret Key**: 32-byte random key, stored encrypted in IndexedDB
-- **Public Key**: Derived from secret key, used as Nostr author
-- **Pad ID**: First 8 bytes of public key, Base59-encoded to 12 characters
+Each pad is associated with a Nostr keypair. In **sender/receiver mode**, the keypair is generated directly. In **pair mode**, it is derived from a root HMAC key.
 
+**Sender/Receiver mode:**
 ```
-Secret Key (32 bytes)
+Secret Key (32 random bytes)
        │
        ▼
 Public Key (32 bytes hex)
@@ -79,6 +77,23 @@ Public Key (32 bytes hex)
        ▼
 Pad ID = Base59(pubkey[0:8]) = 12 characters
 ```
+
+**Pair mode:**
+```
+Root Secret Key (32 bytes) → non-extractable HMAC CryptoKey
+       │
+       ▼  HMAC-SHA256(rootKey, "nostrpad-pair:{code}:{role}")
+       │
+Derived Nostr Secret Key (32 bytes, raw in memory)
+       │
+       ▼
+Public Key (32 bytes hex)
+       │
+       ▼
+Pad ID = Base59(pubkey[0:8]) = 12 characters
+```
+
+In both modes, the pad ID is a 12-character Base59 identifier derived from the first 8 bytes of the public key.
 
 ### URL Routing
 
@@ -289,7 +304,7 @@ On load (`getDecryptedPairSession`), derived pad IDs are verified against stored
 
 ### Content Encryption
 
-All pad content is encrypted using NIP-44 before publishing:
+All pad content (both sender/receiver and pair mode) is encrypted using NIP-44 before publishing. The encryption key is derived deterministically from the padId, **not** from the secret key:
 
 ```typescript
 // Derive encryption key deterministically from padId
@@ -304,6 +319,8 @@ interface PadPayload {
 // Encrypt payload
 const encrypted = nip44Encrypt(JSON.stringify(payload), conversationKey)
 ```
+
+Since the padId is in the URL, anyone with the URL can decrypt content. In pair mode, the padId is derived from the HMAC-derived public key (not from the root secret key directly), but it is still visible in the `/p/<padId>` URL. The encryption provides obfuscation from relay operators, not confidentiality.
 
 The `timestamp` field enables conflict resolution - newer timestamps win.
 
@@ -489,15 +506,17 @@ For each event received:
 
 ### What's Protected
 
-- **Session secret keys**: Encrypted at rest in IndexedDB with non-extractable AES keys
+- **Session secret keys (sender/receiver)**: Encrypted at rest in IndexedDB with non-extractable AES keys
 - **Pair mode root key**: Stored as a non-extractable HMAC-SHA256 CryptoKey in IndexedDB — raw bytes never enter JavaScript after initial import
-- **Content in transit**: NIP-44 encryption between client and relays
+- **Content on relays** (obfuscation only): NIP-44 encryption using `sha256("nostrpad:" + padId)`. This prevents casual reading by relay operators but is **not confidential** — anyone with the padId (which is in the URL) can derive the key and decrypt. See "What's NOT Protected" below.
 
 ### What's NOT Protected
 
-- **Content confidentiality**: Anyone with the padId can derive the decryption key
+- **Content confidentiality**: Anyone with the padId can derive the decryption key (`sha256("nostrpad:" + padId)`). This applies to both sender/receiver and pair mode — the padId is in the URL.
 - **Metadata**: Relay operators can see pubkeys, timestamps, event sizes
 - **Browser-level attacks**: XSS could access decrypted content in memory
+- **Derived keys in memory**: In both modes, nostr signing keys exist as raw `Uint8Array` in JavaScript memory at runtime. The HMAC root key (pair mode) and AES wrapping key (sender/receiver) are non-extractable, but the derived/decrypted signing keys are exposed during use.
+- **Pair code entropy**: Pair codes are 5 random characters from a 29-character alphabet (~24 bits). An attacker who has the same root secret key could enumerate all ~20M possible codes. The pair code is a channel identifier, not a security boundary — the root secret key is the security boundary.
 - **Session expiration**: There is no server-side session management or automatic expiration. Sessions persist indefinitely in IndexedDB until manually cleared.
 - **Physical access**: Anyone with access to the browser (same device, same browser profile) can resume an active session and gain full read/write access to the pad unless the session is cleared.
 
@@ -509,7 +528,7 @@ The pair secret key is the root HMAC key. Derived nostr keys are `HMAC-SHA256(se
 
 - **Secret key is NOT compromised.** HMAC is a one-way keyed function — knowing the output for one input does not reveal the key. There is no feasible way to reverse the HMAC to recover the root secret key.
 - **Other pair sessions are NOT compromised.** Each (pairCode, role) combination produces a cryptographically independent derived key. Knowing the derived key for one pair code gives zero information about derived keys for other pair codes.
-- **Attacker capability is limited to one pad.** With a leaked derived key they can sign nostr events for that single pad, but cannot create new pair sessions or impersonate the user on any other pair.
+- **Attacker capability is limited to one pad.** With a leaked derived key they can sign nostr events for that single pad and decrypt its content (since the padId is derivable from the public key, which gives the NIP-44 conversation key). They cannot create new pair sessions or impersonate the user on any other pair.
 
 In short: if someone runs the app in an untrusted environment and the derived nostr keys are extracted from memory, the root pair secret key (stored as a non-extractable CryptoKey) remains safe. The user can clear that pair session and create new ones without needing to rotate their secret key.
 
