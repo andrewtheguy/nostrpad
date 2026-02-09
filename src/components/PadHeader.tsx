@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { ShareModal } from './ShareModal'
 import { InfoModal } from './InfoModal'
 import { PairModal } from './PairModal'
-import { navigateTo } from '../lib/navigation'
 import { clearSession } from '../lib/sessionStorage'
 
 interface PadHeaderProps {
@@ -26,7 +25,7 @@ export function PadHeader({ isSaving, canEdit, lastSaved, padId, content, isLoad
   }
 
   const handleHome = () => {
-    navigateTo('/')
+    window.location.href = '/'
   }
 
   const handleCopy = async () => {
