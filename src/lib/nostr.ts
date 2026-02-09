@@ -144,7 +144,7 @@ export async function publishEvent(
 
   const promises = relays.map(async (relay) => {
     try {
-      await pool.publish([relay], event)
+      pool.publish([relay], event)
       successRelays.push(relay)
     } catch (error) {
       console.warn(`Failed to publish to ${relay}:`, error)
