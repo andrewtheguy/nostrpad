@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { ShareModal } from './ShareModal'
 import { InfoModal } from './InfoModal'
-import { PairModal } from './PairModal'
 import { clearSession } from '../lib/sessionStorage'
 
 interface PadHeaderProps {
@@ -16,7 +15,6 @@ interface PadHeaderProps {
 export function PadHeader({ isSaving, canEdit, lastSaved, padId, content, isLoadingContent }: PadHeaderProps) {
   const [showShareModal, setShowShareModal] = useState(false)
   const [showInfoModal, setShowInfoModal] = useState(false)
-  const [showPairModal, setShowPairModal] = useState(false)
   const [copied, setCopied] = useState(false)
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const mountedRef = useRef(true)
@@ -135,14 +133,6 @@ export function PadHeader({ isSaving, canEdit, lastSaved, padId, content, isLoad
             <span className="sm:hidden">🗑️</span>
             <span className="hidden sm:inline">Clear Session</span>
           </button>
-          {canEdit && (
-            <button
-              onClick={() => setShowPairModal(true)}
-              className="px-2 py-1 text-xs sm:text-sm bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
-            >
-              Pair
-            </button>
-          )}
           <button
             onClick={() => setShowShareModal(true)}
             className="px-2 py-1 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
@@ -160,11 +150,6 @@ export function PadHeader({ isSaving, canEdit, lastSaved, padId, content, isLoad
       )}
       {showInfoModal && (
         <InfoModal onClose={() => setShowInfoModal(false)} />
-      )}
-      {showPairModal && (
-        <PairModal
-          onClose={() => setShowPairModal(false)}
-        />
       )}
     </>
   )
