@@ -1,4 +1,6 @@
+let _deviceLabel: string | null = null
 function getDeviceLabel(): string {
+  if (_deviceLabel) return _deviceLabel
   if (typeof navigator === 'undefined') return 'Unknown'
   const ua = navigator.userAgent
   let os = 'Unknown'
@@ -17,11 +19,12 @@ function getDeviceLabel(): string {
   else if (/Chrome\//.test(ua) && !/Edg\//.test(ua)) browser = 'Chrome'
   else if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) browser = 'Safari'
 
-  return browser ? `${os}/${browser}` : os
+  _deviceLabel = browser ? `${os}/${browser}` : os
+  return _deviceLabel
 }
 
 interface SendPaneHeaderProps {
-  localPadId: string
+  localPadId?: string
   onPaste: () => void
   onClear: () => void
   pasteStatus: 'idle' | 'pasted' | 'empty'

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { ShareModal } from './ShareModal'
 import { InfoModal } from './InfoModal'
 import { PairModal } from './PairModal'
@@ -18,6 +18,15 @@ export function PadHeader({ isSaving, canEdit, lastSaved, padId, content, isLoad
   const [showInfoModal, setShowInfoModal] = useState(false)
   const [showPairModal, setShowPairModal] = useState(false)
   const [copied, setCopied] = useState(false)
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+    }
+  }, [])
 
   const formatLastSaved = (date: Date | null) => {
     if (!date) return null
@@ -32,7 +41,10 @@ export function PadHeader({ isSaving, canEdit, lastSaved, padId, content, isLoad
     try {
       await navigator.clipboard.writeText(content)
       setCopied(true)
-      setTimeout(() => setCopied(false), 1000)
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+      copyTimeoutRef.current = setTimeout(() => {
+        if (mountedRef.current) setCopied(false)
+      }, 1000)
     } catch (error) {
       console.error('Failed to copy:', error)
     }
