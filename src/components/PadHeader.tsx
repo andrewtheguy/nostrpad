@@ -4,25 +4,21 @@ import { InfoModal } from './InfoModal'
 import { PairModal } from './PairModal'
 import { navigateTo } from '../lib/navigation'
 import { clearSession } from '../lib/sessionStorage'
-import { clearPairSession } from '../lib/pairSessionStorage'
 
-interface HeaderProps {
+interface PadHeaderProps {
   isSaving: boolean
   canEdit: boolean
   lastSaved: Date | null
   padId: string
   content: string
   isLoadingContent?: boolean
-  isSplitMode?: boolean
-  pairCode?: string
 }
 
-export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoadingContent, isSplitMode, pairCode }: HeaderProps) {
+export function PadHeader({ isSaving, canEdit, lastSaved, padId, content, isLoadingContent }: PadHeaderProps) {
   const [showShareModal, setShowShareModal] = useState(false)
   const [showInfoModal, setShowInfoModal] = useState(false)
   const [showPairModal, setShowPairModal] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [copiedPairCode, setCopiedPairCode] = useState(false)
 
   const formatLastSaved = (date: Date | null) => {
     if (!date) return null
@@ -54,25 +50,13 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoading
   }
 
   const handleClearSession = async () => {
-    if (isSplitMode && pairCode) {
-      if (confirm('Are you sure you want to clear this pair session?')) {
-        try {
-          await clearPairSession(pairCode)
-          window.location.href = '/'
-        } catch (error) {
-          console.error('Failed to clear pair session:', error)
-          alert('Failed to clear pair session. Please try again.')
-        }
-      }
-    } else {
-      if (confirm('Are you sure you want to clear the session? You will lose access to edit this pad.')) {
-        try {
-          await clearSession()
-          window.location.href = '/'
-        } catch (error) {
-          console.error('Failed to clear session:', error)
-          alert('Failed to clear session. Please try again.')
-        }
+    if (confirm('Are you sure you want to clear the session? You will lose access to edit this pad.')) {
+      try {
+        await clearSession()
+        window.location.href = '/'
+      } catch (error) {
+        console.error('Failed to clear session:', error)
+        alert('Failed to clear session. Please try again.')
       }
     }
   }
@@ -91,25 +75,7 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoading
           >
             i
           </button>
-          {isSplitMode && (
-            <button
-              onClick={async () => {
-                if (!pairCode) return
-                try {
-                  await navigator.clipboard.writeText(pairCode)
-                  setCopiedPairCode(true)
-                  setTimeout(() => setCopiedPairCode(false), 1500)
-                } catch (err) {
-                  console.error('Failed to copy pair code:', err)
-                }
-              }}
-              className="px-2 py-0.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-purple-100 rounded transition-colors cursor-pointer"
-              title={copiedPairCode ? 'Copied!' : 'Click to copy pair code'}
-            >
-              {copiedPairCode ? 'Copied!' : `Pair${pairCode ? ` [${pairCode}]` : ''}`}
-            </button>
-          )}
-          {!canEdit && !isSplitMode && (
+          {!canEdit && (
             <span className="px-2 py-0.5 text-xs font-medium bg-yellow-600 text-yellow-100 rounded">View Only</span>
           )}
           <button
@@ -134,26 +100,22 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoading
               Saved {formatLastSaved(lastSaved)}
             </span>
           )}
-          {!isSplitMode && (
-            <>
-              <button
-                onClick={handleCopy}
-                className="px-2 py-1 text-xs sm:text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
-                title={copied ? 'Copied!' : 'Copy content'}
-              >
-                <span className="sm:hidden">{copied ? '✓' : '📋'}</span>
-                <span className="hidden sm:inline">{copied ? '✓Copied' : 'Copy'}</span>
-              </button>
-              <button
-                onClick={handleDownload}
-                className="px-2 py-1 text-xs sm:text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
-                title="Download content"
-              >
-                <span className="sm:hidden">⬇️</span>
-                <span className="hidden sm:inline">Download</span>
-              </button>
-            </>
-          )}
+          <button
+            onClick={handleCopy}
+            className="px-2 py-1 text-xs sm:text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
+            title={copied ? 'Copied!' : 'Copy content'}
+          >
+            <span className="sm:hidden">{copied ? '✓' : '📋'}</span>
+            <span className="hidden sm:inline">{copied ? '✓Copied' : 'Copy'}</span>
+          </button>
+          <button
+            onClick={handleDownload}
+            className="px-2 py-1 text-xs sm:text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
+            title="Download content"
+          >
+            <span className="sm:hidden">⬇️</span>
+            <span className="hidden sm:inline">Download</span>
+          </button>
           <button
             onClick={handleClearSession}
             className="px-2 py-1 text-xs sm:text-sm bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
@@ -162,24 +124,20 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoading
             <span className="sm:hidden">🗑️</span>
             <span className="hidden sm:inline">Clear Session</span>
           </button>
-          {!isSplitMode && (
-            <>
-              {canEdit && (
-                <button
-                  onClick={() => setShowPairModal(true)}
-                  className="px-2 py-1 text-xs sm:text-sm bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
-                >
-                  Pair
-                </button>
-              )}
-              <button
-                onClick={() => setShowShareModal(true)}
-                className="px-2 py-1 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
-              >
-                Share
-              </button>
-            </>
+          {canEdit && (
+            <button
+              onClick={() => setShowPairModal(true)}
+              className="px-2 py-1 text-xs sm:text-sm bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
+            >
+              Pair
+            </button>
           )}
+          <button
+            onClick={() => setShowShareModal(true)}
+            className="px-2 py-1 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+          >
+            Share
+          </button>
         </div>
       </header>
 
@@ -190,7 +148,7 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoading
         />
       )}
       {showInfoModal && (
-        <InfoModal onClose={() => setShowInfoModal(false)} isSplitMode={isSplitMode} />
+        <InfoModal onClose={() => setShowInfoModal(false)} />
       )}
       {showPairModal && (
         <PairModal
