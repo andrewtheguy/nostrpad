@@ -4,6 +4,7 @@ import { InfoModal } from './InfoModal'
 import { PairModal } from './PairModal'
 import { navigateTo } from '../lib/navigation'
 import { clearSession } from '../lib/sessionStorage'
+import { clearPairSession } from '../lib/pairSessionStorage'
 
 interface HeaderProps {
   isSaving: boolean
@@ -53,13 +54,25 @@ export function Header({ isSaving, canEdit, lastSaved, padId, content, isLoading
   }
 
   const handleClearSession = async () => {
-    if (confirm('Are you sure you want to clear the session? You will lose access to edit this pad.')) {
-      try {
-        await clearSession()
-        window.location.href = '/'
-      } catch (error) {
-        console.error('Failed to clear session:', error)
-        alert('Failed to clear session. Please try again.')
+    if (isSplitMode && pairCode) {
+      if (confirm('Are you sure you want to clear this pair session?')) {
+        try {
+          await clearPairSession(pairCode)
+          window.location.href = '/'
+        } catch (error) {
+          console.error('Failed to clear pair session:', error)
+          alert('Failed to clear pair session. Please try again.')
+        }
+      }
+    } else {
+      if (confirm('Are you sure you want to clear the session? You will lose access to edit this pad.')) {
+        try {
+          await clearSession()
+          window.location.href = '/'
+        } catch (error) {
+          console.error('Failed to clear session:', error)
+          alert('Failed to clear session. Please try again.')
+        }
       }
     }
   }
