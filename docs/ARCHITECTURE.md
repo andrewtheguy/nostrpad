@@ -536,52 +536,56 @@ For each event received:
 ### What's Protected
 
 - **Session secret keys (sender/receiver)**: Encrypted at rest in IndexedDB with non-extractable AES keys
-- **Pair mode root key**: Stored as a non-extractable HMAC-SHA256 CryptoKey in IndexedDB — raw bytes never enter JavaScript after initial import
+- **Pair mode root key**: Stored as both a non-extractable HMAC-SHA256 CryptoKey and a non-extractable HKDF CryptoKey in IndexedDB — raw bytes never enter JavaScript after initial import
 - **Content on relays (sender/receiver)** (obfuscation only): NIP-44 encryption using `sha256("nostrpad:" + padId)`. This prevents casual reading by relay operators but is **not confidential** — anyone with the padId (which is in the URL) can derive the key and decrypt.
-- **Content on relays (pair mode)**: AES-GCM-256 with HKDF-derived non-extractable keys from the root secret. Only someone with the root secret key can derive the content encryption keys. Even with scripting access to IndexedDB, the content keys cannot be exported.
+- **Content on relays (pair mode)** (confidential): AES-GCM-256 with HKDF-derived non-extractable keys from the root secret. Only someone with the root secret key can derive the content encryption keys. The content keys are non-extractable CryptoKey objects — even with scripting access to IndexedDB, they cannot be exported. Knowing the pairCode, the URL, or even the derived signing keys is **not sufficient** to decrypt content.
+- **Pair mode signing/content key separation**: The derived nostr signing key (from HMAC) and the content encryption key (from HKDF) are independent. Leaking the signing key does not reveal the content key, and vice versa.
 
 ### What's NOT Protected
 
-- **Content confidentiality (sender/receiver)**: Anyone with the padId can derive the decryption key (`sha256("nostrpad:" + padId)`) — the padId is in the URL.
-- **Metadata**: Relay operators can see pubkeys, timestamps, event sizes
-- **Browser-level attacks**: XSS could access decrypted content in memory
-- **Derived keys in memory**: In both modes, nostr signing keys exist as raw `Uint8Array` in JavaScript memory at runtime. The HMAC root key (pair mode) and AES wrapping key (sender/receiver) are non-extractable, but the derived/decrypted signing keys are exposed during use.
+- **Content confidentiality (sender/receiver only)**: Anyone with the padId can derive the decryption key (`sha256("nostrpad:" + padId)`) — the padId is in the URL. This does **not** apply to pair mode, where content keys require the root secret.
+- **Metadata**: Relay operators can see pubkeys, timestamps, and event sizes in both modes. In pair mode, the pairCode is in the URL but does not reveal which relay events correspond to the session (that requires the HMAC key to derive the pubkeys).
+- **Browser-level attacks (both modes)**: XSS could access decrypted content in memory. In pair mode, XSS can also call `crypto.subtle.encrypt`/`decrypt` using the non-extractable content keys (they can't export the keys, but can use them while the page is compromised).
+- **Signing keys in memory (both modes)**: Nostr signing keys exist as raw `Uint8Array` in JavaScript memory at runtime (Web Crypto doesn't support secp256k1). In sender/receiver mode, the signing key also implicitly grants content decryption (via padId derivation). In pair mode, the signing key only grants write access — content decryption requires the separate HKDF-derived content key, which remains non-extractable.
 - **Pair code entropy**: Pair codes are 5 random characters from a 29-character alphabet (~24 bits). An attacker who has the same root secret key could enumerate all ~20M possible codes. The pair code is a channel identifier, not a security boundary — the root secret key is the security boundary.
 - **Session expiration**: There is no server-side session management or automatic expiration. Sessions persist indefinitely in IndexedDB until manually cleared.
-- **Physical access**: Anyone with access to the browser (same device, same browser profile) can resume an active session and gain full read/write access to the pad unless the session is cleared.
+- **Physical access**: Anyone with access to the browser (same device, same browser profile) can resume an active session. In sender/receiver mode this grants full read/write access. In pair mode, the attacker can use the non-extractable CryptoKey objects through the browser's Web Crypto API (decrypt content, encrypt new content, sign events) but cannot export the root key or content keys.
 
 ### Data Safety When Derived Keys Are Compromised
 
-#### Pair mode — secret key safe even if derived nostr keys leak
+#### Pair mode — secret key and content safe even if derived signing key leaks
 
-The pair secret key is the root HMAC key. Derived nostr keys are `HMAC-SHA256(secretKey, "nostrpad-pair:" + code + ":" + role)`. If an attacker obtains a derived key (e.g., from memory, a compromised environment, or a leaked nostr event signature):
+The pair secret key is the root HMAC/HKDF key. Derived nostr signing keys are `HMAC-SHA256(secretKey, "nostrpad-pair:" + code + ":" + role)`. Content keys are `HKDF(secretKey, info="nostrpad-pair-content:" + code + ":" + role)`. These are independent derivation paths. If an attacker obtains a derived signing key (e.g., from memory, a compromised environment, or a leaked nostr event signature):
 
-- **Secret key is NOT compromised.** HMAC is a one-way keyed function — knowing the output for one input does not reveal the key. There is no feasible way to reverse the HMAC to recover the root secret key.
-- **Other pair sessions are NOT compromised.** Each (pairCode, role) combination produces a cryptographically independent derived key. Knowing the derived key for one pair code gives zero information about derived keys for other pair codes.
-- **Attacker capability is limited to one pad.** With a leaked derived key they can sign nostr events for that single pad and decrypt its content (since the padId is derivable from the public key, which gives the NIP-44 conversation key). They cannot create new pair sessions or impersonate the user on any other pair.
+- **Secret key is NOT compromised.** HMAC is a one-way keyed function — knowing the output for one input does not reveal the key.
+- **Content is NOT compromised.** The content encryption keys are derived via HKDF with a different info string than the signing keys. Knowing the signing key does not reveal the HKDF-derived content key. The attacker can publish events but cannot decrypt existing content.
+- **Other pair sessions are NOT compromised.** Each (pairCode, role) combination produces a cryptographically independent derived key.
+- **Attacker capability is limited to write access on one pad.** With a leaked derived signing key they can sign nostr events for that single pad, but they cannot decrypt content (requires the HKDF root key) and cannot create new pair sessions or impersonate the user on any other pair.
 
-In short: if someone runs the app in an untrusted environment and the derived nostr keys are extracted from memory, the root pair secret key (stored as a non-extractable CryptoKey) remains safe. The user can clear that pair session and create new ones without needing to rotate their secret key.
+In short: if someone runs the app in an untrusted environment and the derived nostr signing keys are extracted from memory, the root pair secret key (stored as a non-extractable CryptoKey) remains safe, and existing content remains confidential. The user can clear that pair session and create new ones without needing to rotate their secret key.
 
 #### Sender/receiver mode — at-rest data safe even if signing key leaks at runtime
 
-In sender/receiver mode, the nostr key IS the signing key (not derived from a root). It must exist as raw bytes in memory for `nostr-tools` signing (Web Crypto doesn't support secp256k1). However:
+In sender/receiver mode, the nostr key IS the signing key (not derived from a root). It must exist as raw bytes in memory for `nostr-tools` signing. A leaked signing key grants **both write and read access**: the attacker can derive the padId from the public key, then derive the NIP-44 conversation key (`sha256("nostrpad:" + padId)`) to decrypt all content.
 
-- **At-rest protection holds.** The nostr key is encrypted in IndexedDB with a non-extractable AES-256-GCM CryptoKey. Even if the runtime environment leaks the decrypted key from memory, the AES wrapping key cannot be exported — an attacker who only has IndexedDB access (e.g., a backup, another app on the same origin) cannot decrypt the stored key without the CryptoKey object in the same browser session.
+However:
+
+- **At-rest protection holds.** The nostr key is encrypted in IndexedDB with a non-extractable AES-256-GCM CryptoKey. An attacker who only has IndexedDB access (e.g., a backup, another app on the same origin) cannot decrypt the stored key without the CryptoKey object in the same browser session.
 - **No root key to protect.** Unlike pair mode there's no derivation hierarchy, so the signing key compromise IS the full compromise for that pad. This is inherent to the single-key-per-pad design.
 
 #### Summary
 
-| Scenario | Secret key safe? | Other sessions safe? |
-|----------|-----------------|---------------------|
-| Pair mode: derived key leaked | Yes (HMAC is one-way) | Yes (independent derivation per code) |
-| Pair mode: IndexedDB accessed without CryptoKey | Yes (non-extractable) | Yes |
-| Sender/receiver: signing key leaked at runtime | N/A (it IS the key) | N/A (single pad) |
-| Sender/receiver: IndexedDB accessed without CryptoKey | Yes (AES non-extractable) | N/A |
+| Scenario | Secret key safe? | Content safe? | Other sessions safe? |
+|----------|-----------------|---------------|---------------------|
+| Pair mode: derived signing key leaked | Yes (HMAC is one-way) | Yes (HKDF content key is separate) | Yes (independent derivation per code) |
+| Pair mode: IndexedDB accessed without CryptoKey | Yes (non-extractable) | Yes (content keys non-extractable) | Yes |
+| Sender/receiver: signing key leaked at runtime | N/A (it IS the key) | No (padId → NIP-44 key) | N/A (single pad) |
+| Sender/receiver: IndexedDB accessed without CryptoKey | Yes (AES non-extractable) | Yes (can't decrypt key) | N/A |
 
 ### Recommendations
 
-- **Do not store sensitive data** - NostrPad is designed for convenience, not security. Treat it as a semi-public scratchpad.
-- Treat pad URLs as semi-public - sharing the URL shares read access
+- **Sender/receiver mode**: Treat pad URLs as semi-public — sharing the URL shares read access (the padId in the URL is sufficient to derive the decryption key)
+- **Pair mode**: URLs (`/p/<pairCode>`) do not grant read access — the pairCode alone cannot derive content keys without the root secret. However, treat the root secret key as the trust boundary
 - Clear sessions when done on shared or public computers
 - Back up secret keys for important pads
 - Use browser private/incognito mode on untrusted devices
