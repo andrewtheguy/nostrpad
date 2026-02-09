@@ -59,6 +59,12 @@ The pad ID is a 12-character Base59 identifier derived from the first 8 bytes of
 
 > **Do not store sensitive data.** NostrPad is designed for convenience, not security. Treat it as a semi-public scratchpad. Sessions never expire and anyone with access to your browser can resume your session unless it is cleared.
 
+> **Sender/Receiver mode — what the secret key protects:**
+> The secret key is used for **signing** (write access), not for content encryption.
+> Content is encrypted with a key derived from the padId, which is embedded in the
+> shared URL. Anyone with the viewer URL can decrypt content. The secret key controls
+> who can **publish** updates — without it, no one can modify the pad.
+
 **Sender/Receiver mode** — Content is encrypted using NIP-44 with a key derived from the padId
 (`sha256("nostrpad:" + padId)`). Anyone with the URL can decrypt the content. The padId is in
 the URL fragment (`/s#<padId>`), which is never sent to the hosting server — this keeps the

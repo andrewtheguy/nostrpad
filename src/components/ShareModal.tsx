@@ -66,7 +66,7 @@ export function ShareModal({ padId, onClose }: ShareModalProps) {
               </button>
             </div>
             <p className="text-xs text-gray-500 mb-4">
-              Share this link with anyone who should view the pad.
+              Anyone with this link can read the pad content. The URL contains the decryption key. Only the secret key holder can edit.
             </p>
             <div className="flex justify-center">
               <canvas ref={canvasRef} className="rounded" />

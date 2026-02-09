@@ -468,8 +468,11 @@ export function SessionStartModal({ onSessionStarted }: SessionStartModalProps) 
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div className="bg-gray-800 rounded-lg p-8 max-w-lg w-full mx-4">
           <h2 className="text-2xl font-bold text-white mb-4">Session Created</h2>
-          <p className="text-gray-300 mb-4">
+          <p className="text-gray-300 mb-2">
             Your new session has been created. Copy the secret key below - this is your only chance to save it for backup. Make sure to copy it before continuing.
+          </p>
+          <p className="text-yellow-400 text-sm mb-4">
+            This key controls write access to your pad. It is NOT used for content encryption — anyone with the viewer URL can read the content.
           </p>
           <div className="bg-gray-900 p-4 rounded flex items-center gap-2">
             <code className="text-green-400 font-mono text-sm break-all flex-1">{newPadData.secret}</code>
